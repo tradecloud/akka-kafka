@@ -30,8 +30,7 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
         "KafkaExtensionSpec",
         ConfigFactory.parseString(s"""
           akka.loglevel = DEBUG
-          akka.test.timefactor = 1
-          extensions = ["nl.tradecloud.adapter.kafka.KafkaExtension"]
+          akka.extensions = ["nl.tradecloud.adapter.kafka.KafkaExtension"]
           akka.actor.debug.receive = on
           tradecloud.kafka {
             bootstrapServers = "localhost:9092"
@@ -74,82 +73,35 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
     super.afterAll()
   }
 
-  val defaultTimeout = FiniteDuration(20, TimeUnit.SECONDS)
+  val defaultTimeout = FiniteDuration(60, TimeUnit.SECONDS)
   val mediator = KafkaExtension(system).mediator
   val mediatorRef = Await.result(mediator.resolveOne(defaultTimeout), defaultTimeout)
+  val log = system.log
 
   "The KafkaExtension" must {
     "be able to subscribe to a topic" in {
-      val probe = TestProbe()
+      val probe0 = TestProbe()
 
       val subscribeCmd = Subscribe(
-        group = "test-group-1",
-        topics = Set("test_topic"),
-        ref = probe.ref
+        group = "test_group_0",
+        topics = Set("test_topic_0"),
+        ref = probe0.ref
       )
 
-      probe.send(mediatorRef, subscribeCmd)
+      probe0.send(mediatorRef, subscribeCmd)
 
-      probe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd))
+      probe0.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd))
 
       mediator ! Publish(
-        topic = "test_topic",
+        topic = "test_topic_0",
         msg = "Hello"
       )
 
-      probe.expectMsgPF(defaultTimeout) {
+      probe0.expectMsgPF(defaultTimeout) {
         case "Hello" =>
-          probe.reply(PubSubAck)
+          probe0.reply(PubSubAck)
           true
       }
-    }
-
-    "be able to receive messages at least once" in {
-      val probe1 = TestProbe()
-
-      val subscribeCmd1 = Subscribe(
-        group = "test-group-2",
-        topics = Set("test_topic"),
-        ref = probe1.ref
-      )
-
-      probe1.send(mediatorRef, subscribeCmd1)
-      probe1.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd1))
-
-      mediator ! Publish(topic = "test_topic", msg = "Hello1")
-      probe1.expectMsgPF(defaultTimeout) {
-        case "Hello1" =>
-          probe1.reply(PubSubAck)
-          true
-      }
-
-//      mediator ! Publish(topic = "test_topic", msg = "Hello2")
-//      probe1.expectMsgPF(defaultTimeout) {
-//        case "Hello2" =>
-//          probe1.reply("Failure!!!")
-//      }
-//
-//      watch(probe1.ref)
-//      probe1.ref ! PoisonPill
-//      expectMsgPF(defaultTimeout) {
-//        case msg: Terminated => true
-//      }
-//
-//      val probe2 = TestProbe()
-//      val subscribeCmd2 = Subscribe(
-//        group = "test-group-2",
-//        topics = Set("test_topic"),
-//        ref = probe2.ref,
-//        acknowledgeMsg = "Ack"
-//      )
-//      mediator ! subscribeCmd2
-//      expectMsg(defaultTimeout, SubscribeAck(subscribeCmd2))
-//
-//      probe2.expectMsgPF(defaultTimeout) {
-//        case "Hello2" =>
-//          probe2.reply("Ack")
-//          true
-//      }
     }
   }
 
