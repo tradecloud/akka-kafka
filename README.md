@@ -1,4 +1,5 @@
 # Kafka Akka Extension
+[![Build Status](https://travis-ci.org/tradecloud/kafka-akka-extension.svg?branch=master)](https://travis-ci.org/tradecloud/kafka-akka-extension)
 Akka extension to publish and subscribe to Kafka topics
 
 ## Configuration
