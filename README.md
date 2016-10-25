@@ -13,6 +13,7 @@ libraryDependencies ++= Seq(
 Enable the Kafka extension in the application.conf file, like:
 ```
 akka.extensions = ["nl.tradecloud.kafka.KafkaExtension"]
+
 tradecloud.kafka {
   bootstrapServers = "localhost:9092"
   acknowledgeTimeout = 5 seconds
