@@ -26,6 +26,7 @@ tradecloud.kafka {
 ### Subscribe
 ```
 val mediator = KafkaExtension(context.system).mediator
+
 mediator ! Subscribe("group-1", Set("topic-1"), self, "Ack")
 
 override def receive: Receive = {
