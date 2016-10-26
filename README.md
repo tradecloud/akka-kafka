@@ -23,6 +23,8 @@ tradecloud.kafka {
 }
 ```
 
+As this library is a wrapper around [Akka's reactive kafka](https://github.com/akka/reactive-kafka), you can also use the configuration options of Reactive Kafka.
+
 ## Usage
 
 ### Subscribe

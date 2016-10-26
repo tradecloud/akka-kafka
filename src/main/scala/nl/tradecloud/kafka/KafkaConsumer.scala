@@ -13,6 +13,7 @@ import akka.serialization.SerializationExtension
 import akka.stream.scaladsl.Sink
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, Supervision}
 import akka.util.Timeout
+import com.typesafe.config.Config
 import nl.tradecloud.kafka.KafkaConsumer.{ConsumerStart, ConsumerTerminating}
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
@@ -74,7 +75,8 @@ class KafkaConsumer(
         prefixedTopics.mkString(", ")
       )
 
-      val consumerSettings = ConsumerSettings(context.system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+      val consumerConfig: Config = context.system.settings.config.getConfig("akka.kafka.consumer")
+      val consumerSettings = ConsumerSettings(consumerConfig, new ByteArrayDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(config.bootstrapServers)
         .withGroupId(group)
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")

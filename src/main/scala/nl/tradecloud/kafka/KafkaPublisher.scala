@@ -10,6 +10,7 @@ import akka.kafka.scaladsl.Producer
 import akka.serialization.SerializationExtension
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, Supervision}
+import com.typesafe.config.Config
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.command.Publish
 import nl.tradecloud.kafka.SerializedMessage.SerializedMessageMsg
@@ -49,7 +50,8 @@ class KafkaPublisher(
   val serializer = SerializationExtension(context.system)
 
   override def preStart(): Unit = {
-    val producerSettings = ProducerSettings(context.system, new ByteArraySerializer, new ByteArraySerializer)
+    val producerConfig: Config = context.system.settings.config.getConfig("akka.kafka.producer")
+    val producerSettings = ProducerSettings(producerConfig, new ByteArraySerializer, new ByteArraySerializer)
       .withBootstrapServers(config.bootstrapServers)
 
     val publisherSource = Source.actorPublisher[Publish](KafkaPublisherSource.props)
