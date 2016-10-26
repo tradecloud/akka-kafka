@@ -30,7 +30,7 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
         "KafkaExtensionSpec",
         ConfigFactory.parseString(s"""
           akka.loglevel = DEBUG
-          akka.extensions = ["nl.tradecloud.adapter.kafka.KafkaExtension"]
+          akka.extensions = ["nl.tradecloud.kafka.KafkaExtension"]
           akka.actor.debug.receive = on
           tradecloud.kafka {
             bootstrapServers = "localhost:9092"
