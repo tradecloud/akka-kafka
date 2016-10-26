@@ -32,32 +32,8 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
           akka.loglevel = DEBUG
           akka.extensions = ["nl.tradecloud.kafka.KafkaExtension"]
           akka.actor.debug.receive = on
-          tradecloud.kafka {
-            bootstrapServers = "localhost:9092"
-            acknowledgeTimeout = 5 seconds
-            topicPrefix = "test-"
-          }
-          dispatchers.kafka-dispatcher {
-            # Dispatcher is the name of the event-based dispatcher
-            type = Dispatcher
-            # What kind of ExecutionService to use
-            executor = "fork-join-executor"
-            # Configuration for the fork join pool
-            fork-join-executor {
-              # Min number of threads to cap factor-based parallelism number to
-              parallelism-min = 2
-              # Parallelism (threads) ... ceil(available processors * factor)
-              parallelism-factor = 2.0
-              # Max number of threads to cap factor-based parallelism number to
-              parallelism-max = 10
-            }
-            # Throughput defines the maximum number of messages to be
-            # processed per actor before the thread jumps to the next actor.
-            # Set to 1 for as fair as possible.
-            throughput = 5
-          }
         """.stripMargin
-        )
+        ).withFallback(ConfigFactory.load())
       )
     )
   }
@@ -68,15 +44,15 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
   }
 
   override def afterAll(): Unit = {
-    shutdown(system, 30.seconds)
+    shutdown(_system, 30.seconds)
     EmbeddedKafka.stop()
     super.afterAll()
   }
 
   val defaultTimeout = FiniteDuration(60, TimeUnit.SECONDS)
-  val mediator = KafkaExtension(system).mediator
+  val mediator = KafkaExtension(_system).mediator
   val mediatorRef = Await.result(mediator.resolveOne(defaultTimeout), defaultTimeout)
-  val log = system.log
+  val log = _system.log
 
   "The KafkaExtension" must {
     "be able to subscribe to a topic" in {
@@ -94,11 +70,22 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
 
       mediator ! Publish(
         topic = "test_topic_0",
-        msg = "Hello"
+        msg = "Hello0"
       )
 
       probe0.expectMsgPF(defaultTimeout) {
-        case "Hello" =>
+        case "Hello0" =>
+          probe0.reply(PubSubAck)
+          true
+      }
+
+      mediator ! Publish(
+        topic = "test_topic_0",
+        msg = "Hello1"
+      )
+
+      probe0.expectMsgPF(defaultTimeout) {
+        case "Hello1" =>
           probe0.reply(PubSubAck)
           true
       }
