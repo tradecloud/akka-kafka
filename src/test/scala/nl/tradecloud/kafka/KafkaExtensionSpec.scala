@@ -12,7 +12,6 @@ import nl.tradecloud.kafka.response.{PubSubAck, SubscribeAck}
 import org.scalactic.ConversionCheckedTripleEquals
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
@@ -51,31 +50,30 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
 
   val defaultTimeout = FiniteDuration(60, TimeUnit.SECONDS)
   val mediator = KafkaExtension(_system).mediator
-  val mediatorRef = Await.result(mediator.resolveOne(defaultTimeout), defaultTimeout)
   val log = _system.log
 
   "The KafkaExtension" must {
     "be able to subscribe to a topic" in {
-      val probe0 = TestProbe()
+      val subscriberProbe = TestProbe("subscriber")
+      val receiverProbe = TestProbe("receiver")
 
       val subscribeCmd = Subscribe(
         group = "test_group_0",
         topics = Set("test_topic_0"),
-        ref = probe0.ref
+        ref = receiverProbe.ref
       )
 
-      probe0.send(mediatorRef, subscribeCmd)
-
-      probe0.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd))
+      subscriberProbe.send(mediator, subscribeCmd)
+      subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd))
 
       mediator ! Publish(
         topic = "test_topic_0",
         msg = "Hello0"
       )
 
-      probe0.expectMsgPF(defaultTimeout) {
+      receiverProbe.expectMsgPF(defaultTimeout) {
         case "Hello0" =>
-          probe0.reply(PubSubAck)
+          receiverProbe.reply(PubSubAck)
           true
       }
 
@@ -84,9 +82,9 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
         msg = "Hello1"
       )
 
-      probe0.expectMsgPF(defaultTimeout) {
+      receiverProbe.expectMsgPF(defaultTimeout) {
         case "Hello1" =>
-          probe0.reply(PubSubAck)
+          receiverProbe.reply(PubSubAck)
           true
       }
     }

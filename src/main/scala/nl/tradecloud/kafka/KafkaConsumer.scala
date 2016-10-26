@@ -89,6 +89,8 @@ class KafkaConsumer(
 
   def subscribing(consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]]): Receive = LoggingReceive {
     case subscribe: Subscribe =>
+      val subscriber = sender()
+
       consumer = Some(
         Consumer
           .committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
@@ -129,7 +131,7 @@ class KafkaConsumer(
       context.become(running)
       context.watch(subscribe.ref)
 
-      sender() ! SubscribeAck(subscribe)
+      subscriber ! SubscribeAck(subscribe)
   }
 
   private[this] def terminateWhenDone(result: Future[Done]): Unit = {
