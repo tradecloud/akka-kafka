@@ -8,6 +8,8 @@ resolvers += Resolver.jcenterRepo
 
 libraryDependencies ++= Dependencies.common
 
+sonatypeProfileName := "nl.tradecloud"
+
 PB.targets in Compile := Seq(
   scalapb.gen() -> (sourceManaged in Compile).value
 )
