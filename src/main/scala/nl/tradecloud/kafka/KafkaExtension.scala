@@ -12,10 +12,9 @@ class KafkaExtensionImpl(system: ExtendedActorSystem) extends Extension {
   system.log.info("Started Kafka extension with servers={}", config.bootstrapServers)
 
   val mediator: ActorRef = system.systemActorOf(
-    KafkaMediator.props(
-      extendedSystem = system,
-      config = config
-    ),
+    KafkaMediator
+      .props(extendedSystem = system, config = config)
+      .withDispatcher("dispatchers.kafka-dispatcher"),
     KafkaMediator.name
   )
 }

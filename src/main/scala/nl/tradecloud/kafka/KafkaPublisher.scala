@@ -23,7 +23,6 @@ class KafkaPublisher(
     config: KafkaConfig,
     topic: String
 ) extends Actor with ActorLogging {
-
   val prefixedTopic: String = config.topicPrefix + topic
 
   log.info("Started publisher for topic={}, prefixedTopic={}", topic, prefixedTopic)
@@ -43,7 +42,6 @@ class KafkaPublisher(
   implicit val materializer: Materializer = ActorMaterializer(
     ActorMaterializerSettings(context.system)
       .withSupervisionStrategy(decider)
-      .withDispatcher("dispatchers.kafka-dispatcher")
   )
 
   val serializer = SerializationExtension(context.system)

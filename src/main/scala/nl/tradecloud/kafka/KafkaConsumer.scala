@@ -32,12 +32,10 @@ class KafkaConsumer(
     config: KafkaConfig,
     group: String,
     topics: Set[String]
-) extends Actor with ActorLogging with Stash {
-  implicit val dispatcher = context.system.dispatchers.lookup("dispatchers.kafka-dispatcher")
+) extends Actor with ActorLogging {
+  import context.dispatcher
 
-  val prefixedTopics: Set[String] = topics.map(config.topicPrefix + _)
-
-  val decider: Supervision.Decider = {
+  final val decider: Supervision.Decider = {
     case e: KafkaDeserializationException =>
       log.error(e, "Message is not deserializable, resuming...")
       Supervision.Resume
@@ -54,7 +52,9 @@ class KafkaConsumer(
       .withSupervisionStrategy(decider)
   )
 
+  val prefixedTopics: Set[String] = topics.map(config.topicPrefix + _)
   val serializer = SerializationExtension(context.system)
+
 
   var consumer: Option[Consumer.Control] = None
 
@@ -66,8 +66,11 @@ class KafkaConsumer(
     )
   }
 
-  def receive: Receive = LoggingReceive {
-    case ConsumerStart =>
+  def receive: Receive = subscribing
+
+  def subscribing: Receive = LoggingReceive {
+    case subscribe: Subscribe =>
+      val subscriber = sender()
       log.info(
         "Start KafkaConsumer, with group={}, topics={}, prefixedTopics={}",
         group,
@@ -80,16 +83,6 @@ class KafkaConsumer(
         .withBootstrapServers(config.bootstrapServers)
         .withGroupId(group)
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-
-      context.become(subscribing(consumerSettings))
-      unstashAll()
-    case msg =>
-      stash()
-  }
-
-  def subscribing(consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]]): Receive = LoggingReceive {
-    case subscribe: Subscribe =>
-      val subscriber = sender()
 
       consumer = Some(
         Consumer
