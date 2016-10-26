@@ -44,3 +44,8 @@ override def receive: Receive = {
 ```
 mediator ! Publish("topic-1", SomeMsgToKafka("Hello World"))
 ```
+
+### Serialization
+
+Serialization is handled using the Akka Remoting component, see: 
+[Akka Remoting Serialization](http://doc.akka.io/docs/akka/current/scala/remoting.html#Serialization)
