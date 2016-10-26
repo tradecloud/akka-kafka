@@ -11,9 +11,8 @@ import akka.serialization.SerializationExtension
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, Supervision}
 import com.typesafe.config.Config
-import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.command.Publish
-import nl.tradecloud.kafka.SerializedMessage.SerializedMessageMsg
+import nl.tradecloud.kafka.config.KafkaConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.ByteArraySerializer
 
@@ -59,12 +58,10 @@ class KafkaPublisher(
       .map { cmd =>
         log.debug("Publishing cmd={}, topic={}, prefixedTopic={}", cmd, topic, prefixedTopic)
 
-        SerializedMessageMsg.toByteArray(
-          KafkaMessageSerializer.serialize(
-            system = extendedSystem,
-            message = cmd.msg
-          )
-        )
+        KafkaMessageSerializer.serialize(
+          system = extendedSystem,
+          message = cmd.msg
+        ).toByteArray
       }
       .map { msg =>
         log.debug("Publishing serialized={}, topic={}, prefixedTopic={}", msg.toString, topic, prefixedTopic)

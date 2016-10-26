@@ -18,7 +18,7 @@ import nl.tradecloud.kafka.KafkaConsumer.{ConsumerStart, ConsumerTerminating}
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.exception.KafkaDeserializationException
-import nl.tradecloud.kafka.SerializedMessage.SerializedMessageMsg
+import nl.tradecloud.kafka.protobuf.SerializedMessage.SerializedMessageMsg
 import nl.tradecloud.kafka.response.SubscribeAck
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer

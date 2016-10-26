@@ -3,7 +3,10 @@ package nl.tradecloud.kafka
 import akka.actor.ExtendedActorSystem
 import akka.serialization.{SerializationExtension, SerializerWithStringManifest}
 import com.google.protobuf.ByteString
-import nl.tradecloud.kafka.SerializedMessage.SerializedMessageMsg
+import nl.tradecloud.kafka.protobuf.SerializedMessage.SerializedMessageMsg
+import org.apache.kafka.common.errors.SerializationException
+
+import scala.util.control.NonFatal
 
 // COPIED FROM AKKA: https://github.com/akka/akka/blob/master/akka-remote/src/main/scala/akka/remote/MessageSerializer.scala
 object KafkaMessageSerializer {
@@ -12,9 +15,9 @@ object KafkaMessageSerializer {
    */
   def deserialize(system: ExtendedActorSystem, messageProtocol: SerializedMessageMsg): AnyRef = {
     SerializationExtension(system).deserialize(
-      messageProtocol.message.toByteArray,
-      messageProtocol.serializerId,
-      if (messageProtocol.messageManifest.isDefined) messageProtocol.getMessageManifest.toStringUtf8 else ""
+      messageProtocol.getMessage.toByteArray,
+      messageProtocol.getSerializerId,
+      if (messageProtocol.hasMessageManifest) messageProtocol.getMessageManifest.toStringUtf8 else ""
     ).get
   }
 
@@ -24,22 +27,25 @@ object KafkaMessageSerializer {
   def serialize(system: ExtendedActorSystem, message: AnyRef): SerializedMessageMsg = {
     val s = SerializationExtension(system)
     val serializer = s.findSerializerFor(message)
+    val builder = SerializedMessageMsg.newBuilder
 
-    SerializedMessageMsg(
-      message = ByteString.copyFrom(serializer.toBinary(message)),
-      serializerId = serializer.identifier,
-      messageManifest = serializer match {
+    try {
+      builder.setMessage(ByteString.copyFrom(serializer.toBinary(message)))
+      builder.setSerializerId(serializer.identifier)
+      serializer match {
         case ser2: SerializerWithStringManifest =>
           val manifest = ser2.manifest(message)
           if (manifest != "")
-            Some(ByteString.copyFromUtf8(manifest))
-          else
-            None
-        case _ if serializer.includeManifest =>
-          Some(ByteString.copyFromUtf8(message.getClass.getName))
+            builder.setMessageManifest(ByteString.copyFromUtf8(manifest))
         case _ =>
-          None
+          if (serializer.includeManifest)
+            builder.setMessageManifest(ByteString.copyFromUtf8(message.getClass.getName))
       }
-    )
+      builder.build
+    } catch {
+      case NonFatal(e) =>
+        throw new SerializationException(s"Failed to serialize akka message [${message.getClass}] " +
+          s"using serializer [${serializer.getClass}].", e)
+    }
   }
 }
