@@ -1,8 +1,0 @@
-option java_package = "nl.tradecloud.kafka.protobuf";
-option optimize_for = SPEED;
-
-message SerializedMessageMsg {
-  required bytes message = 1;
-  required int32 serializerId = 2;
-  optional bytes messageManifest = 3;
-}

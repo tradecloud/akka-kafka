@@ -9,6 +9,7 @@ import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.pattern.ask
+import akka.remote.WireFormats.SerializedMessage
 import akka.serialization.SerializationExtension
 import akka.stream.scaladsl.Sink
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, Supervision}
@@ -18,7 +19,6 @@ import nl.tradecloud.kafka.KafkaConsumer.{ConsumerStart, ConsumerTerminating}
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.exception.KafkaDeserializationException
-import nl.tradecloud.kafka.protobuf.SerializedMessage.SerializedMessageMsg
 import nl.tradecloud.kafka.response.SubscribeAck
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
@@ -90,8 +90,8 @@ class KafkaConsumer(
           .map { message: CommittableMessage[Array[Byte], Array[Byte]] =>
             log.debug("Received message value={}, key={}", message.record.value, message.record.key)
 
-            SerializedMessageMsg.parseFrom(message.record.value) match {
-              case payload: SerializedMessageMsg =>
+            SerializedMessage.parseFrom(message.record.value) match {
+              case payload: SerializedMessage =>
                 message -> KafkaMessageSerializer.deserialize(
                   system = extendedSystem,
                   messageProtocol = payload

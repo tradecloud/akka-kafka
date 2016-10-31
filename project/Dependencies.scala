@@ -12,7 +12,6 @@ object  Dependencies {
     "com.typesafe.akka"       %% "akka-slf4j"                 % Version.akka,
     "com.iheart"              %% "ficus"                      % "1.2.6",
     "ch.qos.logback"          %  "logback-classic"            % "1.1.6",
-    "com.google.protobuf"     %  "protobuf-java"              % "3.1.0",
     "org.scalatest"           %% "scalatest"                  % "2.2.4"           % "test",
     "com.typesafe.akka"       %% "akka-testkit"               % Version.akka      % "test",
     "org.mockito"             %  "mockito-core"               % "1.10.19"         % "test",
