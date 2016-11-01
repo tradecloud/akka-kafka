@@ -1,5 +1,6 @@
 package nl.tradecloud.kafka
 
+import java.io.NotSerializableException
 import java.util.concurrent.TimeUnit
 
 import akka.Done
@@ -18,7 +19,6 @@ import com.typesafe.config.Config
 import nl.tradecloud.kafka.KafkaConsumer.{ConsumerStart, ConsumerTerminating}
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
-import nl.tradecloud.kafka.exception.KafkaDeserializationException
 import nl.tradecloud.kafka.response.SubscribeAck
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
@@ -36,14 +36,14 @@ class KafkaConsumer(
   import context.dispatcher
 
   final val decider: Supervision.Decider = {
-    case e: KafkaDeserializationException =>
+    case e: NotSerializableException =>
       log.error(e, "Message is not deserializable, resuming...")
       Supervision.Resume
     case e: Throwable =>
-      log.error(e, "Exception occurred")
+      log.error(e, "Exception occurred, stopping...")
       Supervision.Stop
     case _ =>
-      log.error("Unknown problem")
+      log.error("Unknown problem, stopping...")
       Supervision.Stop
   }
 
@@ -97,8 +97,7 @@ class KafkaConsumer(
                   messageProtocol = payload
                 )
               case _ =>
-                log.error("Unable to deserialize msg={}", message.record.value)
-                throw KafkaDeserializationException(s"Unable to deserialize msg ${message.record.value}")
+                throw new NotSerializableException(s"Unable to deserialize msg ${message.record.value}")
             }
           }
           .mapAsync(2) { // sending and committing offset
