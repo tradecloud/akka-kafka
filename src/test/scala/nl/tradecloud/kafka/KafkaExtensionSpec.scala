@@ -18,7 +18,7 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
   with WordSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach
   with ConversionCheckedTripleEquals {
 
-  implicit val mat = ActorMaterializer()(_system)
+  implicit val mat: ActorMaterializer = ActorMaterializer()(_system)
   implicit val ec = _system.dispatcher
   implicit val embeddedKafkaConfig = EmbeddedKafkaConfig(9092, 2181)
   val bootstrapServers = s"localhost:${embeddedKafkaConfig.kafkaPort}"

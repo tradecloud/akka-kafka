@@ -1,10 +1,8 @@
 name := """kafka-akka-extension"""
 
-version := "0.7"
+version := "0.9"
 
-scalaVersion := "2.11.8"
-
-resolvers += Resolver.jcenterRepo
+scalaVersion := "2.12.1"
 
 libraryDependencies ++= Dependencies.common
 

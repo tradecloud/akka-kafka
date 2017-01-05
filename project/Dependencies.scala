@@ -2,7 +2,7 @@ import sbt._
 
 object  Dependencies {
   object Version {
-    val akka = "2.4.11"
+    val akka = "2.4.16"
   }
 
   val common = Seq(
@@ -10,12 +10,11 @@ object  Dependencies {
     "com.typesafe.akka"       %% "akka-actor"                 % Version.akka,
     "com.typesafe.akka"       %% "akka-remote"                % Version.akka,
     "com.typesafe.akka"       %% "akka-slf4j"                 % Version.akka,
-    "com.iheart"              %% "ficus"                      % "1.2.6",
-    "ch.qos.logback"          %  "logback-classic"            % "1.1.6",
-    "org.scalatest"           %% "scalatest"                  % "2.2.4"           % "test",
+    "com.iheart"              %% "ficus"                      % "1.4.0",
+    "ch.qos.logback"          %  "logback-classic"            % "1.1.8",
+    "org.scalatest"           %% "scalatest"                  % "3.0.1"           % "test",
     "com.typesafe.akka"       %% "akka-testkit"               % Version.akka      % "test",
-    "org.mockito"             %  "mockito-core"               % "1.10.19"         % "test",
-    "net.manub"               %% "scalatest-embedded-kafka"   % "0.7.1"           % "test"
+    "net.manub"               %% "scalatest-embedded-kafka"   % "0.11.0"          % "test" exclude("log4j", "log4j")
   )
 
 }

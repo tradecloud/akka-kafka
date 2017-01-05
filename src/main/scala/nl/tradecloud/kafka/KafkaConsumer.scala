@@ -26,6 +26,7 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
+import scala.util.{Failure, Success}
 
 class KafkaConsumer(
     extendedSystem: ExtendedActorSystem,
@@ -54,7 +55,6 @@ class KafkaConsumer(
 
   val prefixedTopics: Set[String] = topics.map(config.topicPrefix + _)
   val serializer = SerializationExtension(context.system)
-
 
   var consumer: Option[Consumer.Control] = None
 
@@ -127,14 +127,8 @@ class KafkaConsumer(
   }
 
   private[this] def terminateWhenDone(result: Future[Done]): Unit = {
-    result.onFailure {
-      case e: Throwable =>
-        log.error(e, e.getMessage)
-        self ! PoisonPill
-    }
-
-    result.onSuccess {
-      case _ =>
+    result.onComplete {
+      case Success(_) =>
         log.info(
           "Stopping consumer with group={}, topics={}, prefixedTopics={}",
           group,
@@ -143,10 +137,13 @@ class KafkaConsumer(
         )
 
         self ! PoisonPill
+      case Failure(e) =>
+        log.error(e, e.getMessage)
+        self ! PoisonPill
     }
   }
 
-  def running = LoggingReceive {
+  def running: Receive = LoggingReceive {
     case msg: Subscribe =>
       log.warning(
         "Consumer with group={}, topics={}, prefixedTopics={} already active",
