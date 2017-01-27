@@ -11,7 +11,8 @@ object  Dependencies {
     "com.typesafe.akka"       %% "akka-remote"                % Version.akka,
     "com.typesafe.akka"       %% "akka-slf4j"                 % Version.akka,
     "com.iheart"              %% "ficus"                      % "1.4.0",
-    "ch.qos.logback"          %  "logback-classic"            % "1.1.8",
+    "ch.qos.logback"          %  "logback-classic"            % "1.1.8"           % "test",
+    "org.slf4j"               %  "log4j-over-slf4j"           % "1.7.12"          % "test",
     "org.scalatest"           %% "scalatest"                  % "3.0.1"           % "test",
     "com.typesafe.akka"       %% "akka-testkit"               % Version.akka      % "test",
     "net.manub"               %% "scalatest-embedded-kafka"   % "0.11.0"          % "test" exclude("log4j", "log4j")
