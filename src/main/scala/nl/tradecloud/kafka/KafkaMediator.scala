@@ -41,8 +41,6 @@ class KafkaMediator(
         ),
         KafkaConsumer.name(group, topics)
       )
-
-      context.watch(consumer)
     }
   }
 }
