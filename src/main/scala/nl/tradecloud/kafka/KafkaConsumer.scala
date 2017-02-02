@@ -10,6 +10,7 @@ import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.pattern.ask
+import akka.protobuf.InvalidProtocolBufferException
 import akka.remote.WireFormats.SerializedMessage
 import akka.serialization.SerializationExtension
 import akka.stream.scaladsl.Sink
@@ -38,6 +39,9 @@ class KafkaConsumer(
 
   final val decider: Supervision.Decider = {
     case e: NotSerializableException =>
+      log.error(e, "Message is not deserializable, resuming...")
+      Supervision.Resume
+    case e: InvalidProtocolBufferException =>
       log.error(e, "Message is not deserializable, resuming...")
       Supervision.Resume
     case e: Throwable =>
