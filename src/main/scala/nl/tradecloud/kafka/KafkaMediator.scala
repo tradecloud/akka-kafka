@@ -32,7 +32,7 @@ class KafkaMediator(
 
   private[this] def consumer(group: String, topics: Set[String]): ActorRef = {
     context.child(KafkaConsumer.name(group, topics)).getOrElse {
-      val consumer = context.actorOf(
+      context.actorOf(
         KafkaConsumer.props(
           extendedSystem = extendedSystem,
           config = config,
