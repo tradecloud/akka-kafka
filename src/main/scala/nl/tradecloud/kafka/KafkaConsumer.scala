@@ -17,7 +17,7 @@ import akka.stream.scaladsl.Sink
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, Supervision}
 import akka.util.Timeout
 import com.typesafe.config.Config
-import nl.tradecloud.kafka.KafkaConsumer.{ConsumerStart, ConsumerTerminating}
+import nl.tradecloud.kafka.KafkaConsumer.ConsumerStart
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.response.SubscribeAck
@@ -27,7 +27,6 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
-import scala.util.{Failure, Success}
 
 class KafkaConsumer(
     extendedSystem: ExtendedActorSystem,
@@ -123,28 +122,11 @@ class KafkaConsumer(
           .run()
       )
 
-      consumer.map(_.isShutdown).foreach(terminateWhenDone)
+      consumer.map(_.isShutdown).foreach(restartOnShutdown)
       context.become(running)
       context.watch(subscribe.ref)
 
       subscriber ! SubscribeAck(subscribe)
-  }
-
-  private[this] def terminateWhenDone(result: Future[Done]): Unit = {
-    result.onComplete {
-      case Success(_) =>
-        log.info(
-          "Stopping consumer with group={}, topics={}, prefixedTopics={}",
-          group,
-          topics.mkString(", "),
-          prefixedTopics.mkString(", ")
-        )
-
-        self ! PoisonPill
-      case Failure(e) =>
-        log.error(e, e.getMessage)
-        self ! PoisonPill
-    }
   }
 
   def running: Receive = LoggingReceive {
@@ -157,24 +139,36 @@ class KafkaConsumer(
       )
 
       sender() ! SubscribeAck(msg)
-    case msg: Terminated =>
+    case _: Terminated =>
+      Await.ready(terminate(), FiniteDuration(20, TimeUnit.SECONDS))
       context.stop(self)
   }
 
-  override def postStop(): Unit = {
-    log.info(
-      "Terminating kafka consumer, group={}, topics={}, prefixedTopics={}",
-      group,
-      topics.mkString(", "),
-      prefixedTopics.mkString(", ")
-    )
-    context.parent ! ConsumerTerminating
-    consumer.map(c => Await.ready(c.shutdown(), FiniteDuration(20, TimeUnit.SECONDS)))
+  private[this] def restartOnShutdown(result: Future[Done]): Unit = {
+    result
+      .map { _ =>
+        log.warning(
+          "Consumer shutdown with group={}, topics={}, prefixedTopics={}",
+          group,
+          topics.mkString(", "),
+          prefixedTopics.mkString(", ")
+        )
+
+        throw new RuntimeException("Consumer shutdown, restarting...")
+      }
+      .recover {
+        case e => throw e
+      }
+  }
+
+  private[this] def terminate(): Future[Done] = {
+    consumer
+      .map(c => c.shutdown())
+      .getOrElse(Future.successful(Done))
   }
 }
 
 object KafkaConsumer {
-  case object ConsumerTerminating
   case object ConsumerStart
 
   def name(

@@ -2,7 +2,8 @@ package nl.tradecloud.kafka
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
+import akka.event.LoggingAdapter
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
@@ -12,6 +13,7 @@ import nl.tradecloud.kafka.response.{PubSubAck, SubscribeAck}
 import org.scalactic.ConversionCheckedTripleEquals
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
 class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
@@ -19,7 +21,7 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
   with ConversionCheckedTripleEquals {
 
   implicit val mat: ActorMaterializer = ActorMaterializer()(_system)
-  implicit val ec = _system.dispatcher
+  implicit val ec: ExecutionContextExecutor = _system.dispatcher
   implicit val embeddedKafkaConfig = EmbeddedKafkaConfig(9092, 2181)
   val bootstrapServers = s"localhost:${embeddedKafkaConfig.kafkaPort}"
 
@@ -49,8 +51,8 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
   }
 
   val defaultTimeout = FiniteDuration(60, TimeUnit.SECONDS)
-  val mediator = KafkaExtension(_system).mediator
-  val log = _system.log
+  val mediator: ActorRef = KafkaExtension(_system).mediator
+  val log: LoggingAdapter = _system.log
 
   "The KafkaExtension" must {
     "be able to subscribe to a topic" in {

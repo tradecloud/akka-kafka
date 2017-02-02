@@ -1,41 +1,20 @@
 package nl.tradecloud.kafka
 
-import java.util.concurrent.TimeUnit
-
 import akka.actor._
 import akka.event.LoggingReceive
-import nl.tradecloud.kafka.KafkaConsumer.ConsumerTerminating
-import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.command.{Publish, Subscribe}
-
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import nl.tradecloud.kafka.config.KafkaConfig
 
 class KafkaMediator(
     extendedSystem: ExtendedActorSystem,
     config: KafkaConfig
-) extends Actor with ActorLogging with Stash {
+) extends Actor with ActorLogging {
 
   def receive: Receive = LoggingReceive {
     case cmd: Subscribe =>
       consumer(cmd.group, cmd.topics) forward cmd
     case cmd: Publish =>
       publisher(cmd.topic) forward cmd
-    case ConsumerTerminating =>
-      context.become(terminatingConsumer(sender()))
-      context.setReceiveTimeout(FiniteDuration(30, TimeUnit.SECONDS))
-  }
-
-  def terminatingConsumer(ref: ActorRef): Receive = LoggingReceive {
-    case ReceiveTimeout =>
-      log.error("Terminating consumer didn't succeed?")
-      context.setReceiveTimeout(Duration.Undefined)
-      context.become(receive)
-      unstashAll()
-    case msg: Terminated if msg.actor == ref => // consumer terminated
-      context.become(receive)
-      unstashAll()
-    case msg =>
-      stash()
   }
 
   private[this] def publisher(topic: String): ActorRef = {
