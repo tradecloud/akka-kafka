@@ -23,6 +23,7 @@ import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.response.SubscribeAck
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import akka.pattern.pipe
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -59,8 +60,6 @@ class KafkaConsumer(
   val prefixedTopics: Set[String] = topics.map(config.topicPrefix + _)
   val serializer = SerializationExtension(context.system)
 
-  var consumer: Option[Consumer.Control] = None
-
   override def preStart(): Unit = {
     context.system.scheduler.scheduleOnce(
       delay = FiniteDuration(10, TimeUnit.SECONDS),
@@ -87,7 +86,7 @@ class KafkaConsumer(
         .withGroupId(group)
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
-      consumer = Some(
+      val consumer =
         Consumer
           .committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
           .map { message: CommittableMessage[Array[Byte], Array[Byte]] =>
@@ -120,16 +119,24 @@ class KafkaConsumer(
           }
           .to(Sink.ignore)
           .run()
-      )
 
-      consumer.map(_.isShutdown).foreach(restartOnShutdown)
-      context.become(running)
+      consumer.isShutdown.pipeTo(self)
+      context.become(running(consumer))
       context.watch(subscribe.ref)
 
       subscriber ! SubscribeAck(subscribe)
   }
 
-  def running: Receive = LoggingReceive {
+  def running(consumer: Consumer.Control): Receive = LoggingReceive {
+    case Done => // consumer shutdown
+      log.warning(
+        "Consumer shutdown with group={}, topics={}, prefixedTopics={}",
+        group,
+        topics.mkString(", "),
+        prefixedTopics.mkString(", ")
+      )
+
+      throw new RuntimeException("Consumer shutdown, restarting...")
     case msg: Subscribe =>
       log.warning(
         "Consumer with group={}, topics={}, prefixedTopics={} already active",
@@ -140,31 +147,8 @@ class KafkaConsumer(
 
       sender() ! SubscribeAck(msg)
     case _: Terminated =>
-      Await.ready(terminate(), FiniteDuration(20, TimeUnit.SECONDS))
+      Await.ready(consumer.shutdown(), FiniteDuration(20, TimeUnit.SECONDS))
       context.stop(self)
-  }
-
-  private[this] def restartOnShutdown(result: Future[Done]): Unit = {
-    result
-      .map { _ =>
-        log.warning(
-          "Consumer shutdown with group={}, topics={}, prefixedTopics={}",
-          group,
-          topics.mkString(", "),
-          prefixedTopics.mkString(", ")
-        )
-
-        throw new RuntimeException("Consumer shutdown, restarting...")
-      }
-      .recover {
-        case e => throw e
-      }
-  }
-
-  private[this] def terminate(): Future[Done] = {
-    consumer
-      .map(c => c.shutdown())
-      .getOrElse(Future.successful(Done))
   }
 }
 

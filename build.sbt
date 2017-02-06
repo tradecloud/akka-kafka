@@ -1,6 +1,6 @@
 name := """kafka-akka-extension"""
 
-version := "0.13"
+version := "0.14"
 
 scalaVersion := "2.12.1"
 
