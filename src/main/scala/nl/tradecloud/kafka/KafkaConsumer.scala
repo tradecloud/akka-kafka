@@ -32,12 +32,12 @@ import scala.language.postfixOps
 class KafkaConsumer(
     extendedSystem: ExtendedActorSystem,
     config: KafkaConfig,
-    group: String,
-    topics: Set[String]
+    subscribe: Subscribe,
+    subscribeSender: ActorRef
 ) extends Actor with ActorLogging {
   import context.dispatcher
 
-  final val decider: Supervision.Decider = {
+  val decider: Supervision.Decider = {
     case e: NotSerializableException =>
       log.error(e, "Message is not deserializable, resuming...")
       Supervision.Resume
@@ -57,33 +57,28 @@ class KafkaConsumer(
       .withSupervisionStrategy(decider)
   )
 
-  val prefixedTopics: Set[String] = topics.map(config.topicPrefix + _)
+  val prefixedTopics: Set[String] = subscribe.topics.map(config.topicPrefix + _)
   val serializer = SerializationExtension(context.system)
 
   override def preStart(): Unit = {
-    context.system.scheduler.scheduleOnce(
-      delay = FiniteDuration(10, TimeUnit.SECONDS),
-      receiver = self,
-      message = ConsumerStart
-    )
+    self ! ConsumerStart
   }
 
   def receive: Receive = subscribing
 
   def subscribing: Receive = LoggingReceive {
-    case subscribe: Subscribe =>
-      val subscriber = sender()
+    case ConsumerStart =>
       log.info(
         "Start KafkaConsumer, with group={}, topics={}, prefixedTopics={}",
-        group,
-        topics.mkString(", "),
+        subscribe.group,
+        subscribe.topics.mkString(", "),
         prefixedTopics.mkString(", ")
       )
 
       val consumerConfig: Config = context.system.settings.config.getConfig("akka.kafka.consumer")
       val consumerSettings = ConsumerSettings(consumerConfig, new ByteArrayDeserializer, new ByteArrayDeserializer)
         .withBootstrapServers(config.bootstrapServers)
-        .withGroupId(group)
+        .withGroupId(subscribe.group)
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
       val consumer =
@@ -124,28 +119,19 @@ class KafkaConsumer(
       context.become(running(consumer))
       context.watch(subscribe.ref)
 
-      subscriber ! SubscribeAck(subscribe)
+      subscribeSender ! SubscribeAck(subscribe)
   }
 
   def running(consumer: Consumer.Control): Receive = LoggingReceive {
     case Done => // consumer shutdown
       log.warning(
         "Consumer shutdown with group={}, topics={}, prefixedTopics={}",
-        group,
-        topics.mkString(", "),
+        subscribe.group,
+        subscribe.topics.mkString(", "),
         prefixedTopics.mkString(", ")
       )
 
       throw new RuntimeException("Consumer shutdown, restarting...")
-    case msg: Subscribe =>
-      log.warning(
-        "Consumer with group={}, topics={}, prefixedTopics={} already active",
-        group,
-        topics.mkString(", "),
-        prefixedTopics.mkString(", ")
-      )
-
-      sender() ! SubscribeAck(msg)
     case _: Terminated =>
       Await.ready(consumer.shutdown(), FiniteDuration(20, TimeUnit.SECONDS))
       context.stop(self)
@@ -155,23 +141,18 @@ class KafkaConsumer(
 object KafkaConsumer {
   case object ConsumerStart
 
-  def name(
-      group: String,
-      topics: Set[String]
-  ): String = s"kafka-consumer-$group-${topics.mkString("_")}"
-
   def props(
       extendedSystem: ExtendedActorSystem,
       config: KafkaConfig,
-      group: String,
-      topics: Set[String]
+      subscribe: Subscribe,
+      subscribeSender: ActorRef
   ): Props = {
     Props(
       classOf[KafkaConsumer],
       extendedSystem,
       config,
-      group,
-      topics
+      subscribe,
+      subscribeSender
     )
   }
 

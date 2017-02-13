@@ -12,7 +12,7 @@ class KafkaMediator(
 
   def receive: Receive = LoggingReceive {
     case cmd: Subscribe =>
-      consumer(cmd.group, cmd.topics) forward cmd
+      startConsumer(cmd, sender())
     case cmd: Publish =>
       publisher(cmd.topic) forward cmd
   }
@@ -30,18 +30,15 @@ class KafkaMediator(
     }
   }
 
-  private[this] def consumer(group: String, topics: Set[String]): ActorRef = {
-    context.child(KafkaConsumer.name(group, topics)).getOrElse {
-      context.actorOf(
-        KafkaConsumer.props(
-          extendedSystem = extendedSystem,
-          config = config,
-          group = group,
-          topics = topics
-        ),
-        KafkaConsumer.name(group, topics)
+  private[this] def startConsumer(subscribe: Subscribe, subscribeSender: ActorRef): ActorRef = {
+    context.actorOf(
+      KafkaConsumer.props(
+        extendedSystem = extendedSystem,
+        config = config,
+        subscribe = subscribe,
+        subscribeSender = subscribeSender
       )
-    }
+    )
   }
 }
 
