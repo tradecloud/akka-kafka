@@ -9,24 +9,24 @@ import akka.event.LoggingReceive
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.pattern.ask
+import akka.pattern.{ask, pipe}
 import akka.protobuf.InvalidProtocolBufferException
 import akka.remote.WireFormats.SerializedMessage
 import akka.serialization.SerializationExtension
+import akka.stream._
 import akka.stream.scaladsl.Sink
-import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, Supervision}
 import akka.util.Timeout
 import com.typesafe.config.Config
 import nl.tradecloud.kafka.KafkaConsumer.ConsumerStart
+import nl.tradecloud.kafka.KafkaMessageDealer.{Deal, DealFailure, DealMaxRetriesReached, DealSuccess}
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.response.SubscribeAck
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import akka.pattern.pipe
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
 class KafkaConsumer(
@@ -81,39 +81,50 @@ class KafkaConsumer(
         .withGroupId(subscribe.group)
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
-      val consumer =
-        Consumer
-          .committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
-          .map { message: CommittableMessage[Array[Byte], Array[Byte]] =>
-            log.debug("Received message value={}, key={}", message.record.value, message.record.key)
+      val consumer = Consumer
+        .committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
+        .map { message: CommittableMessage[Array[Byte], Array[Byte]] =>
+          log.debug("Received message value={}, key={}", message.record.value, message.record.key)
 
-            SerializedMessage.parseFrom(message.record.value) match {
-              case payload: SerializedMessage =>
-                message -> KafkaMessageSerializer.deserialize(
-                  system = extendedSystem,
-                  messageProtocol = payload
+          SerializedMessage.parseFrom(message.record.value) match {
+            case payload: SerializedMessage =>
+              message -> KafkaMessageSerializer.deserialize(
+                system = extendedSystem,
+                messageProtocol = payload
+              )
+            case _ =>
+              throw new NotSerializableException(s"Unable to deserialize msg ${message.record.value}")
+          }
+        }
+        .mapAsync(1) {
+          case (message: CommittableMessage[Array[Byte], Array[Byte]], msg: AnyRef) =>
+            val timeout = KafkaSingleMessageDealer.maxTotalDelay(config)
+            log.debug("Sending msg={}, max timeout={}", msg, timeout)
+
+            messageDealer
+              .ask(
+                Deal(
+                  message = msg,
+                  subscription = subscribe
                 )
-              case _ =>
-                throw new NotSerializableException(s"Unable to deserialize msg ${message.record.value}")
-            }
-          }
-          .mapAsync(2) { // sending and committing offset
-            case (message: CommittableMessage[Array[Byte], Array[Byte]], msg: AnyRef) =>
-              log.debug("Sending msg={}", msg)
-
-              subscribe.ref.ask(message = msg)(timeout = Timeout(config.acknowledgeTimeout)).flatMap {
-                case subscribe.acknowledgeMsg =>
-                  log.debug("Committing offset={}", message.record.offset())
-
-                  message.committableOffset.commitScaladsl()
-                case resp =>
-                  log.warning("Received invalid acknowledge msg={}", resp)
-
-                  Future.successful(resp)
+              )(timeout = Timeout(timeout))
+              .recover {
+                case e: Throwable =>
+                  log.error(e, "Failed to receive acknowledge")
+                  DealFailure
               }
-          }
-          .to(Sink.ignore)
-          .run()
+              .map {
+                case (DealSuccess | DealMaxRetriesReached | DealFailure) => message
+                case _ =>
+                  throw new RuntimeException(s"Failed to handle kafka message, msg=$msg")
+              }
+        }
+        .mapAsync(1) { msg =>
+          log.info("Committing offset, offset={}", msg.record.offset())
+          msg.committableOffset.commitScaladsl()
+        }
+        .to(Sink.ignore)
+        .run()
 
       consumer.isShutdown.pipeTo(self)
       context.become(running(consumer))
@@ -135,6 +146,15 @@ class KafkaConsumer(
     case _: Terminated =>
       Await.ready(consumer.shutdown(), FiniteDuration(20, TimeUnit.SECONDS))
       context.stop(self)
+  }
+
+  private[this] def messageDealer: ActorRef = {
+    context.child(KafkaMessageDealer.name).getOrElse {
+      context.actorOf(
+        KafkaMessageDealer.props(config),
+        name = KafkaMessageDealer.name
+      )
+    }
   }
 }
 
