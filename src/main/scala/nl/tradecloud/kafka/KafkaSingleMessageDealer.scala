@@ -24,14 +24,14 @@ class KafkaSingleMessageDealer(
     self ! DealMessage
   }
 
-  var attemptsLeft: Int = config.maxAttempts
+  var attemptsLeft: Int = subscription.retryAttempts
 
   def receive: Receive = LoggingReceive {
     case DealMessage =>
-      context.setReceiveTimeout(config.acknowledgeTimeout)
+      context.setReceiveTimeout(subscription.acknowledgeTimeout)
       subscription.ref ! messageToDeal
     case ReceiveTimeout =>
-      log.error("Max acknowledge timeout exceeded, max={}", config.acknowledgeTimeout)
+      log.error("Max acknowledge timeout exceeded, max={}", subscription.acknowledgeTimeout)
       retry()
     case subscription.acknowledgeMsg =>
       success()
@@ -44,7 +44,9 @@ class KafkaSingleMessageDealer(
 
   private[this] def failure(): Unit = {
     onFailure(
-      new RuntimeException(s"Failed to receive acknowledge, after ${config.maxAttempts - attemptsLeft} attempts")
+      new RuntimeException(
+        s"Failed to receive acknowledge, after ${subscription.retryAttempts - attemptsLeft} attempts"
+      )
     )
     context.stop(self)
   }
@@ -59,7 +61,7 @@ class KafkaSingleMessageDealer(
     context.setReceiveTimeout(Duration.Undefined)
     attemptsLeft -= 1
     if (attemptsLeft > 0) {
-      val retryDelay: FiniteDuration = KafkaSingleMessageDealer.retryDelay(config, attemptsLeft)
+      val retryDelay: FiniteDuration = KafkaSingleMessageDealer.retryDelay(subscription.retryAttempts, attemptsLeft)
 
       log.info("Retrying after {}...", retryDelay)
 
@@ -80,17 +82,17 @@ class KafkaSingleMessageDealer(
 }
 
 object KafkaSingleMessageDealer {
-  def retryDelay(config: KafkaConfig, attemptsLeft: Int): FiniteDuration = {
+  def retryDelay(maxAttempts: Int, attemptsLeft: Int): FiniteDuration = {
     FiniteDuration(
-      Math.pow(2, config.maxAttempts - attemptsLeft).toInt,
+      Math.pow(2, maxAttempts - attemptsLeft).toInt,
       TimeUnit.SECONDS
     )
   }
 
-  def maxTotalDelay(config: KafkaConfig): FiniteDuration = {
-    val totalAcknowledgeTimeout = config.acknowledgeTimeout * config.maxAttempts
+  def dealTimeout(retryAttempts: Int, acknowledgeTimeout: FiniteDuration): FiniteDuration = {
+    val totalAcknowledgeTimeout = acknowledgeTimeout * retryAttempts
     // see https://en.wikipedia.org/wiki/Geometric_series
-    val totalRetryDelay = FiniteDuration((1 - Math.pow(2, config.maxAttempts).toInt) / (1 - 2), TimeUnit.SECONDS)
+    val totalRetryDelay = FiniteDuration((1 - Math.pow(2, retryAttempts).toInt) / (1 - 2), TimeUnit.SECONDS)
 
     totalAcknowledgeTimeout + totalRetryDelay
   }

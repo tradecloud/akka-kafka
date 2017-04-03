@@ -3,10 +3,14 @@ package nl.tradecloud.kafka.command
 import akka.actor.ActorRef
 import nl.tradecloud.kafka.response.{PubSubAck, PubSubRetry}
 
+import scala.concurrent.duration.FiniteDuration
+
 final case class Subscribe(
     group: String,
     topics: Set[String],
     ref: ActorRef,
     acknowledgeMsg: Any = PubSubAck,
-    retryMsg: Any = PubSubRetry
+    acknowledgeTimeout: FiniteDuration,
+    retryMsg: Any = PubSubRetry,
+    retryAttempts: Int
 )

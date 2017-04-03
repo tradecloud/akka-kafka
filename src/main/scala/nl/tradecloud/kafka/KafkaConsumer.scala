@@ -98,8 +98,11 @@ class KafkaConsumer(
         }
         .mapAsync(1) {
           case (message: CommittableMessage[Array[Byte], Array[Byte]], msg: AnyRef) =>
-            val timeout = KafkaSingleMessageDealer.maxTotalDelay(config)
-            log.debug("Sending msg={}, max timeout={}", msg, timeout)
+            val dealTimeoutDuration = KafkaSingleMessageDealer.dealTimeout(
+              retryAttempts = subscribe.retryAttempts,
+              acknowledgeTimeout = subscribe.acknowledgeTimeout
+            )
+            log.debug("Sending msg={}, max timeout={}", msg, dealTimeoutDuration)
 
             messageDealer
               .ask(
@@ -107,7 +110,7 @@ class KafkaConsumer(
                   message = msg,
                   subscription = subscribe
                 )
-              )(timeout = Timeout(timeout))
+              )(timeout = Timeout(dealTimeoutDuration))
               .recover {
                 case e: Throwable =>
                   log.error(e, "Failed to receive acknowledge")

@@ -62,7 +62,9 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
       val subscribeCmd = Subscribe(
         group = "test_group_0",
         topics = Set("test_topic_0"),
-        ref = receiverProbe.ref
+        ref = receiverProbe.ref,
+        acknowledgeTimeout = 10.seconds,
+        retryAttempts = 10
       )
 
       subscriberProbe.send(mediator, subscribeCmd)
