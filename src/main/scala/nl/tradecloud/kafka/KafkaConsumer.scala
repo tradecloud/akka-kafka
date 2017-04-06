@@ -18,7 +18,7 @@ import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import com.typesafe.config.Config
 import nl.tradecloud.kafka.KafkaConsumer.ConsumerStart
-import nl.tradecloud.kafka.KafkaMessageDealer.{Deal, DealFailure, DealMaxRetriesReached, DealSuccess}
+import nl.tradecloud.kafka.KafkaMessageDispatcher.{Dispatch, DispatchFailure, DispatchMaxRetriesReached, DispatchSuccess}
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.response.SubscribeAck
@@ -98,28 +98,29 @@ class KafkaConsumer(
         }
         .mapAsync(1) {
           case (message: CommittableMessage[Array[Byte], Array[Byte]], msg: AnyRef) =>
-            val dealTimeoutDuration = KafkaSingleMessageDealer.dealTimeout(
+            val dispatchTimeoutDuration = KafkaSingleMessageDispatcher.dispatchTimeout(
               retryAttempts = subscribe.retryAttempts,
               acknowledgeTimeout = subscribe.acknowledgeTimeout
             )
-            log.debug("Sending msg={}, max timeout={}", msg, dealTimeoutDuration)
 
-            messageDealer
+            log.debug("Dispatching msg={}, max timeout={}", msg, dispatchTimeoutDuration)
+
+            messageDispatcher
               .ask(
-                Deal(
+                Dispatch(
                   message = msg,
                   subscription = subscribe
                 )
-              )(timeout = Timeout(dealTimeoutDuration))
+              )(timeout = Timeout(dispatchTimeoutDuration))
               .recover {
                 case e: Throwable =>
                   log.error(e, "Failed to receive acknowledge")
-                  DealFailure
+                  DispatchFailure
               }
               .map {
-                case (DealSuccess | DealMaxRetriesReached | DealFailure) => message
+                case (DispatchSuccess | DispatchMaxRetriesReached | DispatchFailure) => message
                 case _ =>
-                  throw new RuntimeException(s"Failed to handle kafka message, msg=$msg")
+                  throw new RuntimeException(s"Failed to dispatch kafka message, msg=$msg")
               }
         }
         .mapAsync(1) { msg =>
@@ -151,11 +152,11 @@ class KafkaConsumer(
       context.stop(self)
   }
 
-  private[this] def messageDealer: ActorRef = {
-    context.child(KafkaMessageDealer.name).getOrElse {
+  private[this] def messageDispatcher: ActorRef = {
+    context.child(KafkaMessageDispatcher.name).getOrElse {
       context.actorOf(
-        KafkaMessageDealer.props(config),
-        name = KafkaMessageDealer.name
+        KafkaMessageDispatcher.props(config),
+        name = KafkaMessageDispatcher.name
       )
     }
   }

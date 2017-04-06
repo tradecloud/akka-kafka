@@ -4,15 +4,15 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorLogging, Props, ReceiveTimeout}
 import akka.event.LoggingReceive
-import nl.tradecloud.kafka.KafkaSingleMessageDealer.DealMessage
+import nl.tradecloud.kafka.KafkaSingleMessageDispatcher.DispatchMessage
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
-class KafkaSingleMessageDealer(
+class KafkaSingleMessageDispatcher(
     config: KafkaConfig,
-    messageToDeal: AnyRef,
+    messageToDispatch: AnyRef,
     subscription: Subscribe,
     onSuccess: Unit => Unit,
     onFailure: Exception => Unit,
@@ -21,15 +21,15 @@ class KafkaSingleMessageDealer(
   import context.dispatcher
 
   override def preStart(): Unit = {
-    self ! DealMessage
+    self ! DispatchMessage
   }
 
   var attemptsLeft: Int = subscription.retryAttempts
 
   def receive: Receive = LoggingReceive {
-    case DealMessage =>
+    case DispatchMessage =>
       context.setReceiveTimeout(subscription.acknowledgeTimeout)
-      subscription.ref ! messageToDeal
+      subscription.ref ! messageToDispatch
     case ReceiveTimeout =>
       log.error("Max acknowledge timeout exceeded, max={}", subscription.acknowledgeTimeout)
       retry()
@@ -52,7 +52,7 @@ class KafkaSingleMessageDealer(
   }
 
   private[this] def success(): Unit = {
-    log.info("Received acknowledge")
+    log.info("Received acknowledge for msg={}", messageToDispatch)
     onSuccess()
     context.stop(self)
   }
@@ -61,27 +61,29 @@ class KafkaSingleMessageDealer(
     context.setReceiveTimeout(Duration.Undefined)
     attemptsLeft -= 1
     if (attemptsLeft > 0) {
-      val retryDelay: FiniteDuration = KafkaSingleMessageDealer.retryDelay(subscription.retryAttempts, attemptsLeft)
+      val retryDelay: FiniteDuration = KafkaSingleMessageDispatcher.retryDelay(subscription.retryAttempts, attemptsLeft)
 
-      log.info("Retrying after {}...", retryDelay)
+      log.warning("Failed to dispatch msg={}, retrying after {}...", messageToDispatch, retryDelay)
 
       context.system.scheduler.scheduleOnce(
         delay = retryDelay,
         receiver = self,
-        message = DealMessage
+        message = DispatchMessage
       )
     } else maxAttemptsReached()
   }
 
   private[this] def maxAttemptsReached(): Unit = {
-    log.warning("Max attempts reached, stopping...")
+    log.error("Failed to dispatch msg={}, max attempts reached, stopping...", messageToDispatch)
     onMaxAttemptsReached()
     context.stop(self)
   }
 
 }
 
-object KafkaSingleMessageDealer {
+object KafkaSingleMessageDispatcher {
+  case object DispatchMessage
+
   def retryDelay(maxAttempts: Int, attemptsLeft: Int): FiniteDuration = {
     FiniteDuration(
       Math.pow(2, maxAttempts - attemptsLeft).toInt,
@@ -89,7 +91,7 @@ object KafkaSingleMessageDealer {
     )
   }
 
-  def dealTimeout(retryAttempts: Int, acknowledgeTimeout: FiniteDuration): FiniteDuration = {
+  def dispatchTimeout(retryAttempts: Int, acknowledgeTimeout: FiniteDuration): FiniteDuration = {
     val totalAcknowledgeTimeout = acknowledgeTimeout * retryAttempts
     // see https://en.wikipedia.org/wiki/Geometric_series
     val totalRetryDelay = FiniteDuration((1 - Math.pow(2, retryAttempts).toInt) / (1 - 2), TimeUnit.SECONDS)
@@ -97,20 +99,18 @@ object KafkaSingleMessageDealer {
     totalAcknowledgeTimeout + totalRetryDelay
   }
 
-  case object DealMessage
-
   def props(
       config: KafkaConfig,
-      messageToDeal: AnyRef,
+      messageToDispatch: AnyRef,
       subscription: Subscribe,
       onSuccess: Unit => Unit,
       onFailure: Exception => Unit,
       onMaxAttemptsReached: Unit => Unit
   ): Props = {
     Props(
-      classOf[KafkaSingleMessageDealer],
+      classOf[KafkaSingleMessageDispatcher],
       config,
-      messageToDeal,
+      messageToDispatch,
       subscription,
       onSuccess,
       onFailure,
