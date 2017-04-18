@@ -57,7 +57,7 @@ override def receive: Receive = {
 
 ### Publish
 ```
-mediator ! Publish("topic-1", SomeMsgToKafka("Hello World"))
+mediator ! Publish("some_topic", SomeMsgToKafka("Hello World"))
 ```
 
 ### Serialization
