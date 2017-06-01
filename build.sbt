@@ -1,8 +1,8 @@
 name := """kafka-akka-extension"""
 
-version := "0.19"
+version := "0.20"
 
-scalaVersion := "2.12.1"
+scalaVersion := "2.12.2"
 
 libraryDependencies ++= Dependencies.common
 

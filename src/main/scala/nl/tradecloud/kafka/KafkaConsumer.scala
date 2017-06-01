@@ -18,7 +18,6 @@ import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import com.typesafe.config.Config
 import nl.tradecloud.kafka.KafkaConsumer.ConsumerStart
-import nl.tradecloud.kafka.KafkaMessageDispatcher.{Dispatch, DispatchFailure, DispatchMaxRetriesReached, DispatchSuccess}
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.response.SubscribeAck
@@ -98,27 +97,17 @@ class KafkaConsumer(
         }
         .mapAsync(1) {
           case (message: CommittableMessage[Array[Byte], Array[Byte]], msg: AnyRef) =>
-            val dispatchTimeoutDuration = KafkaSingleMessageDispatcher.dispatchTimeout(
-              retryAttempts = subscribe.retryAttempts,
-              acknowledgeTimeout = subscribe.acknowledgeTimeout
-            )
+            log.debug("Dispatching msg={}, max timeout={}", msg, subscribe.acknowledgeTimeout)
 
-            log.debug("Dispatching msg={}, max timeout={}", msg, dispatchTimeoutDuration)
-
-            messageDispatcher
-              .ask(
-                Dispatch(
-                  message = msg,
-                  subscription = subscribe
-                )
-              )(timeout = Timeout(dispatchTimeoutDuration))
-              .recover {
-                case e: Throwable =>
-                  log.error(e, "Failed to receive acknowledge")
-                  DispatchFailure
-              }
+            subscribe
+              .ref
+              .ask(msg)(timeout = Timeout(subscribe.acknowledgeTimeout))
               .map {
-                case (DispatchSuccess | DispatchMaxRetriesReached | DispatchFailure) => message
+                case subscribe.acknowledgeMsg =>
+                  message
+                case subscribe.retryMsg =>
+                  log.warning("Received retry message, msg={}", subscribe.retryMsg)
+                  throw KafkaConsumer.DispatchRetryException("Failed to process the message, retrying...")
                 case _ =>
                   throw new RuntimeException(s"Failed to dispatch kafka message, msg=$msg")
               }
@@ -151,19 +140,13 @@ class KafkaConsumer(
       Await.ready(consumer.shutdown(), FiniteDuration(20, TimeUnit.SECONDS))
       context.stop(self)
   }
-
-  private[this] def messageDispatcher: ActorRef = {
-    context.child(KafkaMessageDispatcher.name).getOrElse {
-      context.actorOf(
-        KafkaMessageDispatcher.props(config),
-        name = KafkaMessageDispatcher.name
-      )
-    }
-  }
 }
 
 object KafkaConsumer {
+  case class DispatchRetryException(message: String) extends Throwable
   case object ConsumerStart
+
+  def name(subscribe: Subscribe): String = s"kafka-consumer-${subscribe.ref.path.name}-${subscribe.topics.mkString("-")}"
 
   def props(
       extendedSystem: ExtendedActorSystem,

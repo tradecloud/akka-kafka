@@ -12,5 +12,6 @@ final case class Subscribe(
     acknowledgeMsg: Any = PubSubAck,
     acknowledgeTimeout: FiniteDuration,
     retryMsg: Any = PubSubRetry,
-    retryAttempts: Int
+    minBackoff: FiniteDuration,
+    maxBackoff: FiniteDuration
 )

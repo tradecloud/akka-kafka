@@ -64,7 +64,8 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
         topics = Set("test_topic_0"),
         ref = receiverProbe.ref,
         acknowledgeTimeout = 10.seconds,
-        retryAttempts = 10
+        minBackoff = 3.seconds,
+        maxBackoff = 10.seconds
       )
 
       subscriberProbe.send(mediator, subscribeCmd)
