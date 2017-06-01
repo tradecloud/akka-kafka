@@ -8,7 +8,7 @@ Akka extension to publish and subscribe to Kafka topics
 Add the TradeCloud kafka extension dependency in the build.sbt, like:
 ```
 libraryDependencies ++= Seq(
-    "nl.tradecloud" %% "kafka-akka-extension" % "0.19"
+    "nl.tradecloud" %% "kafka-akka-extension" % "0.20"
 )
 ```
 
@@ -34,10 +34,11 @@ mediator !  ! Subscribe(
   group = "some_group",
   topics = Set("some_topic"),
   ref = self,
-  acknowledgeTimeout = 4.seconds,
-  retryAttempts = 3,
   acknowledgeMsg = "Ack",
-  retryMsg = "Retry"
+  retryMsg = "Retry",
+  acknowledgeTimeout = 10.seconds,
+  minBackoff = 3.seconds,
+  maxBackoff = 10.seconds
 )
 
 override def receive: Receive = {
