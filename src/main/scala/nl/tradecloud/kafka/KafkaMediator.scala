@@ -14,7 +14,7 @@ class KafkaMediator(
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy() {
-      case _: KafkaConsumer.DispatchRetryException => Restart
+      case _: KafkaConsumerActor.DispatchRetryException => Restart
       case t =>
         super.supervisorStrategy.decider.applyOrElse(t, (_: Any) => Escalate)
     }
@@ -27,20 +27,20 @@ class KafkaMediator(
   }
 
   private[this] def publisher(topic: String): ActorRef = {
-    context.child(KafkaPublisher.name(topic)).getOrElse {
+    context.child(KafkaPublisherActor.name(topic)).getOrElse {
       context.actorOf(
-        KafkaPublisher.props(
+        KafkaPublisherActor.props(
           extendedSystem = extendedSystem,
           config = config,
           topic = topic
         ),
-        KafkaPublisher.name(topic)
+        KafkaPublisherActor.name(topic)
       )
     }
   }
 
   private[this] def startConsumer(subscribe: Subscribe, subscribeSender: ActorRef): ActorRef = {
-    val consumerProps = KafkaConsumer.props(
+    val consumerProps = KafkaConsumerActor.props(
       extendedSystem = extendedSystem,
       config = config,
       subscribe = subscribe,
@@ -50,7 +50,7 @@ class KafkaMediator(
     val supervisor = BackoffSupervisor.props(
       Backoff.onFailure(
         consumerProps,
-        childName = KafkaConsumer.name(subscribe),
+        childName = KafkaConsumerActor.name(subscribe),
         minBackoff = subscribe.minBackoff,
         maxBackoff = subscribe.maxBackoff,
         randomFactor = 0.0
