@@ -30,7 +30,7 @@ trait KafkaPublisher {
       Supervision.Stop
   }
 
-  private[this] implicit val materializer: Materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
+  implicit val materializer: Materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
 
   protected[this] def produce(config: KafkaConfig, topic: String): (ActorRef, Future[Done]) = {
     val prefixedTopic: String = config.topicPrefix + topic

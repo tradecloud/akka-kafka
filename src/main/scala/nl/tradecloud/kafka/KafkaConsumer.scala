@@ -34,7 +34,7 @@ trait KafkaConsumer {
       Supervision.Stop
   }
 
-  private[this] implicit val materializer: Materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
+  implicit val materializer: Materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
 
   protected[this] def initConsumer(config: KafkaConfig, subscribe: Subscribe): Source[KafkaMessage, Consumer.Control] = {
     val prefixedTopics: Set[String] = subscribe.topics.map(config.topicPrefix + _)
