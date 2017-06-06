@@ -6,6 +6,7 @@ import akka.event.LoggingReceive
 import akka.pattern.{Backoff, BackoffSupervisor}
 import nl.tradecloud.kafka.command.{Publish, Subscribe}
 import nl.tradecloud.kafka.config.KafkaConfig
+import nl.tradecloud.kafka.failure.KafkaConsumeError
 
 class KafkaMediator(
     extendedSystem: ExtendedActorSystem,
@@ -14,7 +15,7 @@ class KafkaMediator(
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy() {
-      case _: KafkaConsumerActor.DispatchRetryException => Restart
+      case _: KafkaConsumeError => Restart
       case t =>
         super.supervisorStrategy.decider.applyOrElse(t, (_: Any) => Escalate)
     }

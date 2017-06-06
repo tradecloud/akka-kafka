@@ -9,9 +9,9 @@ import akka.kafka.scaladsl.Consumer
 import akka.pattern.{ask, pipe}
 import akka.stream.scaladsl.Sink
 import akka.util.Timeout
-import nl.tradecloud.kafka.KafkaConsumerActor.ConsumerStart
-import nl.tradecloud.kafka.command.Subscribe
+import nl.tradecloud.kafka.command.{Subscribe, SubscribeWithAcknowledgement}
 import nl.tradecloud.kafka.config.KafkaConfig
+import nl.tradecloud.kafka.failure.KafkaConsumeError
 import nl.tradecloud.kafka.response.SubscribeAck
 
 import scala.concurrent.Await
@@ -21,46 +21,41 @@ import scala.language.postfixOps
 class KafkaConsumerActor(
     extendedSystem: ExtendedActorSystem,
     config: KafkaConfig,
-    subscribe: Subscribe,
+    subscribe: SubscribeWithAcknowledgement,
     subscribeSender: ActorRef
 ) extends Actor with ActorLogging with KafkaConsumer {
   import context.dispatcher
 
-  override def preStart(): Unit = {
-    self ! ConsumerStart
-  }
+  implicit val acknowledgeTimeout = Timeout(subscribe.acknowledgeTimeout)
 
-  def receive: Receive = LoggingReceive {
-    case ConsumerStart =>
-      implicit val acknowledgeTimeout = Timeout(subscribe.acknowledgeTimeout)
+  val consumer: Consumer.Control = initConsumer(config, subscribe)
+    .mapAsync(1) { msg: KafkaConsumer.KafkaMessage =>
+      log.debug("Dispatching msg={}, max timeout={}", msg, subscribe.acknowledgeTimeout)
 
-      val consumer = initConsumer(config, subscribe)
-        .mapAsync(1) { msg: KafkaConsumer.KafkaMessage =>
-          log.debug("Dispatching msg={}, max timeout={}", msg, subscribe.acknowledgeTimeout)
+      (subscribe.ref ? msg.msg).map {
+        case subscribe.acknowledgeMsg =>
+          msg.kafkaMsg
+        case subscribe.retryMsg =>
+          log.warning("Received retry message, msg={}", subscribe.retryMsg)
+          throw KafkaConsumeError("Failed to process the message, retrying...")
+        case _ =>
+          throw new RuntimeException(s"Failed to dispatch kafka message, msg=$msg")
+      }
+    }
+    .mapAsync(1) { msg =>
+      log.info("Committing offset, offset={}", msg.record.offset())
+      msg.committableOffset.commitScaladsl()
+    }
+    .to(Sink.ignore)
+    .run()
 
-          (subscribe.ref ? msg.msg).map {
-            case subscribe.acknowledgeMsg =>
-              msg.kafkaMsg
-            case subscribe.retryMsg =>
-              log.warning("Received retry message, msg={}", subscribe.retryMsg)
-              throw KafkaConsumerActor.DispatchRetryException("Failed to process the message, retrying...")
-            case _ =>
-              throw new RuntimeException(s"Failed to dispatch kafka message, msg=$msg")
-          }
-        }
-        .mapAsync(1) { msg =>
-          log.info("Committing offset, offset={}", msg.record.offset())
-          msg.committableOffset.commitScaladsl()
-        }
-        .to(Sink.ignore)
-        .run()
+  consumer.isShutdown.pipeTo(self)
+  context.become(running(consumer))
+  context.watch(subscribe.ref)
 
-      consumer.isShutdown.pipeTo(self)
-      context.become(running(consumer))
-      context.watch(subscribe.ref)
+  subscribeSender ! SubscribeAck(subscribe)
 
-      subscribeSender ! SubscribeAck(subscribe)
-  }
+  def receive: Receive = Actor.emptyBehavior
 
   def running(consumer: Consumer.Control): Receive = LoggingReceive {
     case Done => // consumer shutdown
@@ -78,9 +73,6 @@ class KafkaConsumerActor(
 }
 
 object KafkaConsumerActor {
-  case class DispatchRetryException(message: String) extends Throwable
-  case object ConsumerStart
-
   def name(subscribe: Subscribe): String = s"kafka-consumer-${subscribe.ref.path.name}-${subscribe.topics.mkString("-")}"
 
   def props(

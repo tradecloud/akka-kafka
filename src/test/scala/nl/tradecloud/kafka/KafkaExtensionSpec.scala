@@ -8,7 +8,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
-import nl.tradecloud.kafka.command.{Publish, Subscribe}
+import nl.tradecloud.kafka.command.{Publish, SubscribeWithAcknowledgement}
 import nl.tradecloud.kafka.response.{PubSubAck, SubscribeAck}
 import org.scalactic.ConversionCheckedTripleEquals
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
@@ -59,7 +59,7 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
       val subscriberProbe = TestProbe("subscriber")
       val receiverProbe = TestProbe("receiver")
 
-      val subscribeCmd = Subscribe(
+      val subscribeCmd = SubscribeWithAcknowledgement(
         group = "test_group_0",
         topics = Set("test_topic_0"),
         ref = receiverProbe.ref,
