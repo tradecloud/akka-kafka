@@ -4,7 +4,7 @@ import akka.actor.SupervisorStrategy.{Escalate, Restart}
 import akka.actor._
 import akka.event.LoggingReceive
 import akka.pattern.{Backoff, BackoffSupervisor}
-import nl.tradecloud.kafka.command.{Publish, Subscribe}
+import nl.tradecloud.kafka.command.{Publish, SubscribeActor}
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.failure.KafkaConsumeError
 
@@ -21,7 +21,7 @@ class KafkaMediator(
     }
 
   def receive: Receive = LoggingReceive {
-    case cmd: Subscribe =>
+    case cmd: SubscribeActor =>
       startConsumer(cmd, sender())
     case cmd: Publish =>
       publisher(cmd.topic) forward cmd
@@ -40,7 +40,7 @@ class KafkaMediator(
     }
   }
 
-  private[this] def startConsumer(subscribe: Subscribe, subscribeSender: ActorRef): ActorRef = {
+  private[this] def startConsumer(subscribe: SubscribeActor, subscribeSender: ActorRef): ActorRef = {
     val consumerProps = KafkaConsumerActor.props(
       extendedSystem = extendedSystem,
       config = config,

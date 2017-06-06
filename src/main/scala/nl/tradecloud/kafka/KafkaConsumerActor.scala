@@ -9,7 +9,7 @@ import akka.kafka.scaladsl.Consumer
 import akka.pattern.{ask, pipe}
 import akka.stream.scaladsl.Sink
 import akka.util.Timeout
-import nl.tradecloud.kafka.command.{Subscribe, SubscribeWithAcknowledgement}
+import nl.tradecloud.kafka.command.{Subscribe, SubscribeActor}
 import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.failure.KafkaConsumeError
 import nl.tradecloud.kafka.response.SubscribeAck
@@ -21,7 +21,7 @@ import scala.language.postfixOps
 class KafkaConsumerActor(
     extendedSystem: ExtendedActorSystem,
     config: KafkaConfig,
-    subscribe: SubscribeWithAcknowledgement,
+    subscribe: SubscribeActor,
     subscribeSender: ActorRef
 ) extends Actor with ActorLogging with KafkaConsumer {
   import context.dispatcher
@@ -73,7 +73,7 @@ class KafkaConsumerActor(
 }
 
 object KafkaConsumerActor {
-  def name(subscribe: Subscribe): String = s"kafka-consumer-${subscribe.ref.path.name}-${subscribe.topics.mkString("-")}"
+  def name(subscribe: SubscribeActor): String = s"kafka-consumer-${subscribe.ref.path.name}-${subscribe.topics.mkString("-")}"
 
   def props(
       extendedSystem: ExtendedActorSystem,
