@@ -30,7 +30,7 @@ As this library is a wrapper around [Akka's reactive kafka](https://github.com/a
 ```
 val mediator = KafkaExtension(context.system).mediator
 
-mediator !  ! Subscribe(
+mediator ! Subscribe(
   group = "some_group",
   topics = Set("some_topic"),
   ref = self,
