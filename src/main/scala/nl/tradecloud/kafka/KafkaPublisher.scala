@@ -3,14 +3,11 @@ package nl.tradecloud.kafka
 import java.io.NotSerializableException
 
 import akka.Done
-import akka.actor._
-import akka.event.LoggingReceive
-import akka.kafka._
+import akka.actor.{Actor, ActorLogging, ActorRef}
 import akka.kafka.scaladsl.Producer
-import akka.serialization.SerializationExtension
+import akka.kafka.{ProducerMessage, ProducerSettings}
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, Supervision}
-import com.typesafe.config.Config
 import nl.tradecloud.kafka.command.Publish
 import nl.tradecloud.kafka.config.KafkaConfig
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -18,16 +15,10 @@ import org.apache.kafka.common.serialization.ByteArraySerializer
 
 import scala.concurrent.Future
 
-class KafkaPublisher(
-    extendedSystem: ExtendedActorSystem,
-    config: KafkaConfig,
-    topic: String
-) extends Actor with ActorLogging {
-  val prefixedTopic: String = config.topicPrefix + topic
+trait KafkaPublisher {
+  this: Actor with ActorLogging =>
 
-  log.info("Started publisher for topic={}, prefixedTopic={}", topic, prefixedTopic)
-
-  val decider: Supervision.Decider = {
+  private[this] val decider: Supervision.Decider = {
     case e: NotSerializableException =>
       log.error(e, "Message is not serializable, resuming...")
       Supervision.Resume
@@ -39,27 +30,21 @@ class KafkaPublisher(
       Supervision.Stop
   }
 
-  implicit val materializer: Materializer = ActorMaterializer(
-    ActorMaterializerSettings(context.system)
-      .withSupervisionStrategy(decider)
-  )
+  implicit val materializer: Materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
 
-  val serializer = SerializationExtension(context.system)
+  protected[this] def produce(config: KafkaConfig, topic: String): (ActorRef, Future[Done]) = {
+    val prefixedTopic: String = config.topicPrefix + topic
 
-  override def preStart(): Unit = {
-    val producerConfig: Config = context.system.settings.config.getConfig("akka.kafka.producer")
-    val producerSettings = ProducerSettings(producerConfig, new ByteArraySerializer, new ByteArraySerializer)
-      .withBootstrapServers(config.bootstrapServers)
+    log.info("Started publisher for topic={}, prefixedTopic={}", topic, prefixedTopic)
 
+    val producerSettings = ProducerSettings(context.system, new ByteArraySerializer, new ByteArraySerializer).withBootstrapServers(config.bootstrapServers)
     val publisherSource = Source.actorPublisher[Publish](KafkaPublisherSource.props)
-    val publisherAndResult = Flow[Publish]
+
+    Flow[Publish]
       .map { cmd =>
         log.debug("Publishing cmd={}, topic={}, prefixedTopic={}", cmd, topic, prefixedTopic)
 
-        KafkaMessageSerializer.serialize(
-          system = extendedSystem,
-          message = cmd.msg
-        ).toByteArray
+        KafkaMessageSerializer.serialize(context.system, message = cmd.msg).toByteArray
       }
       .map { msg =>
         log.debug("Publishing serialized={}, topic={}, prefixedTopic={}", msg.toString, topic, prefixedTopic)
@@ -68,41 +53,6 @@ class KafkaPublisher(
       }
       .via(Producer.flow(producerSettings))
       .runWith(publisherSource, Sink.ignore)
-
-    context.watch(publisherAndResult._1)
-    context.become(running(publisherAndResult))
   }
-
-  def receive: Receive = LoggingReceive {
-    case msg =>
-      log.warning(
-        "Received message={} before publisher with topic={}, prefixedTopic={} was started",
-        msg, topic, prefixedTopic
-      )
-  }
-
-  def running(publisherAndResult: (ActorRef, Future[Done])): Receive = LoggingReceive {
-    case msg: Terminated => // source terminated
-      log.info("Publisher source stopped, stopping publisher...")
-      self ! PoisonPill
-    case cmd: Publish =>
-      publisherAndResult._1 ! cmd
-  }
-}
-
-object KafkaPublisher {
-
-  final def name(topic: String): String = s"kafka-publisher-$topic"
-
-  def props(
-      extendedSystem: ExtendedActorSystem,
-      config: KafkaConfig,
-      topic: String
-  ): Props = Props(
-    classOf[KafkaPublisher],
-    extendedSystem,
-    config,
-    topic
-  )
 
 }
