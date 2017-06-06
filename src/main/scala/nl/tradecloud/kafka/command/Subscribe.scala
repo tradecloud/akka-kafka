@@ -8,15 +8,11 @@ import scala.concurrent.duration.FiniteDuration
 sealed trait Subscribe {
   def group: String
   def topics: Set[String]
-  def minBackoff: FiniteDuration
-  def maxBackoff: FiniteDuration
 }
 
 case class SubscribeStream(
     group: String,
-    topics: Set[String],
-    minBackoff: FiniteDuration,
-    maxBackoff: FiniteDuration
+    topics: Set[String]
 ) extends Subscribe
 
 case class SubscribeActor(

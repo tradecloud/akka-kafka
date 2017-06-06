@@ -26,11 +26,11 @@ As this library is a wrapper around [Akka's reactive kafka](https://github.com/a
 
 ## Usage
 
-### Subscribe
+### Subscribe Actor
 ```
 val mediator = KafkaExtension(context.system).mediator
 
-mediator ! Subscribe(
+mediator ! SubscribeActor(
   group = "some_group",
   topics = Set("some_topic"),
   ref = self,
@@ -54,6 +54,38 @@ override def receive: Receive = {
         case PermanentFailure => kafkaConsumer ! "Failure"
       }
    ...
+```
+
+### Subscribe Stream
+```
+class SubscribingActor(kafkaConfig: KafkaConfig) extends Actor with ActorLogging with KafkaConsumer {
+
+  def receive: Receive = Actor.emptyBehavior
+
+  val subscribe: Subscribe = SubscribeStream(
+    group = "some_subscriber_group",
+    topics = Set("some_topic")
+  )
+
+  initConsumer(kafkaConfig, subscribe)
+    .mapAsync(1) { msg: KafkaConsumer.KafkaMessage =>
+      log.debug("Dispatching msg={}, max timeout={}", msg, subscribe.acknowledgeTimeout)
+
+      
+      // do something here
+    }
+    .map {
+      // do some other stuff
+    }
+    .mapAsync(1) { msg =>
+      log.info("Committing offset, offset={}", msg.record.offset())
+      msg.committableOffset.commitScaladsl()
+    }
+    .to(Sink.ignore)
+    .run()
+  
+}
+
 ```
 
 ### Publish
