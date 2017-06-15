@@ -2,6 +2,7 @@ package nl.tradecloud.kafka
 
 import java.util.concurrent.TimeUnit
 
+import akka.Done
 import akka.actor.{ActorRef, ActorSystem}
 import akka.event.LoggingAdapter
 import akka.stream.ActorMaterializer
@@ -10,15 +11,13 @@ import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import nl.tradecloud.kafka.command.{Publish, SubscribeActor}
 import nl.tradecloud.kafka.response.{PubSubAck, SubscribeAck}
-import org.scalactic.ConversionCheckedTripleEquals
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
 
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContextExecutor, Promise}
 
 class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
-  with WordSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach
-  with ConversionCheckedTripleEquals {
+  with WordSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   implicit val mat: ActorMaterializer = ActorMaterializer()(_system)
   implicit val ec: ExecutionContextExecutor = _system.dispatcher
@@ -71,26 +70,34 @@ class KafkaExtensionSpec(_system: ActorSystem) extends TestKit(_system)
       subscriberProbe.send(mediator, subscribeCmd)
       subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd))
 
+      // wait 10 seconds to start the consumer
+      Thread.sleep(10000)
+
+      val completedPublish1 = Promise[Done]()
+
       mediator ! Publish(
         topic = "test_topic_0",
-        msg = "Hello0"
+        msg = "Hello0",
+        completed = completedPublish1
       )
 
       receiverProbe.expectMsgPF(defaultTimeout) {
         case "Hello0" =>
           receiverProbe.reply(PubSubAck)
-          true
+          completedPublish1.isCompleted === true
       }
 
+      val completedPublish2 = Promise[Done]()
       mediator ! Publish(
         topic = "test_topic_0",
-        msg = "Hello1"
+        msg = "Hello1",
+        completed = completedPublish2
       )
 
       receiverProbe.expectMsgPF(defaultTimeout) {
         case "Hello1" =>
           receiverProbe.reply(PubSubAck)
-          true
+          completedPublish2.isCompleted === true
       }
     }
   }

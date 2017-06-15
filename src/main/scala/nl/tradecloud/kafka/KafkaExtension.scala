@@ -1,19 +1,13 @@
 package nl.tradecloud.kafka
 
 import akka.actor._
-import net.ceedubs.ficus.Ficus._
-import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import nl.tradecloud.kafka.config.KafkaConfig
 
 class KafkaExtensionImpl(system: ExtendedActorSystem) extends Extension {
-  final val config: KafkaConfig =
-    system.settings.config.as[KafkaConfig]("tradecloud.kafka")
-
-  system.log.info("Started Kafka extension with servers={}", config.bootstrapServers)
+  system.log.info("Started Kafka extension")
 
   val mediator: ActorRef = system.systemActorOf(
     KafkaMediator
-      .props(extendedSystem = system, config = config)
+      .props(extendedSystem = system)
       .withDispatcher("dispatchers.kafka-dispatcher"),
     KafkaMediator.name
   )

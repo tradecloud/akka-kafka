@@ -1,58 +1,60 @@
 package nl.tradecloud.kafka
 
-import java.io.NotSerializableException
+import java.util.concurrent.atomic.AtomicInteger
 
 import akka.Done
-import akka.actor.{Actor, ActorLogging, ActorRef}
-import akka.kafka.scaladsl.Producer
-import akka.kafka.{ProducerMessage, ProducerSettings}
-import akka.stream.scaladsl.{Flow, Sink, Source}
-import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, Supervision}
+import akka.actor.{ActorContext, ActorRef, ActorSystem, Props, SupervisorStrategy}
+import akka.kafka.ProducerSettings
+import akka.pattern.BackoffSupervisor
+import akka.stream.Materializer
 import nl.tradecloud.kafka.command.Publish
 import nl.tradecloud.kafka.config.KafkaConfig
-import org.apache.kafka.clients.producer.ProducerRecord
-import org.apache.kafka.common.serialization.ByteArraySerializer
+import org.apache.kafka.common.serialization.{ByteArraySerializer, StringSerializer}
 
-import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
-trait KafkaPublisher {
-  this: Actor with ActorLogging =>
+class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: ActorContext) {
+  import KafkaPublisher._
 
-  private[this] val decider: Supervision.Decider = {
-    case e: NotSerializableException =>
-      log.error(e, "Message is not serializable, resuming...")
-      Supervision.Resume
-    case e: Throwable =>
-      log.error(e, "Exception occurred")
-      Supervision.Stop
-    case _ =>
-      log.error("Unknown problem")
-      Supervision.Stop
+  implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
+
+  val kafkaConfig = KafkaConfig(system.settings.config)
+
+  private lazy val publisherId = KafkaClientIdSequenceNumber.getAndIncrement
+
+  private def publisherSettings = {
+    val keySerializer = new StringSerializer
+    val valueSerializer = new ByteArraySerializer
+
+    ProducerSettings(system, keySerializer, valueSerializer).withBootstrapServers(kafkaConfig.brokers)
   }
 
-  implicit val materializer: Materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
+  private def getOrCreatePublisher(): ActorRef = {
+    val name: String = s"KafkaBackoffPublisher$publisherId"
 
-  protected[this] def produce(config: KafkaConfig, topic: String): (ActorRef, Future[Done]) = {
-    val prefixedTopic: String = config.topicPrefix + topic
-
-    log.info("Started publisher for topic={}, prefixedTopic={}", topic, prefixedTopic)
-
-    val producerSettings = ProducerSettings(context.system, new ByteArraySerializer, new ByteArraySerializer).withBootstrapServers(config.bootstrapServers)
-    val publisherSource = Source.actorPublisher[Publish](KafkaPublisherSource.props)
-
-    Flow[Publish]
-      .map { cmd =>
-        log.debug("Publishing cmd={}, topic={}, prefixedTopic={}", cmd, topic, prefixedTopic)
-
-        KafkaMessageSerializer.serialize(context.system, message = cmd.msg).toByteArray
-      }
-      .map { msg =>
-        log.debug("Publishing serialized={}, topic={}, prefixedTopic={}", msg.toString, topic, prefixedTopic)
-
-        ProducerMessage.Message(new ProducerRecord[Array[Byte], Array[Byte]](prefixedTopic, msg), msg)
-      }
-      .via(Producer.flow(producerSettings))
-      .runWith(publisherSource, Sink.ignore)
+    context.child(name).getOrElse {
+      val publisherProps: Props = KafkaPublisherActor.props(kafkaConfig, publisherSettings)
+      val backoffPublisherProps: Props = BackoffSupervisor.propsWithSupervisorStrategy(
+        publisherProps, s"KafkaPublisherActor$publisherId", 3.seconds,
+        30.seconds, 1.0, SupervisorStrategy.stoppingStrategy
+      )
+      context.actorOf(backoffPublisherProps, name)
+    }
   }
 
+  def publish(topic: String, msg: AnyRef): Future[Done] = {
+    val publishActor = getOrCreatePublisher()
+
+    val completed: Promise[Done] = Promise()
+
+    publishActor ! Publish(topic, msg, completed)
+
+    completed.future
+  }
+
+}
+
+object KafkaPublisher {
+  private val KafkaClientIdSequenceNumber = new AtomicInteger(1)
 }
