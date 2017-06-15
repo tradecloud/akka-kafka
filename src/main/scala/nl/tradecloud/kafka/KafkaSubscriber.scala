@@ -44,7 +44,7 @@ class KafkaSubscriber(subscribe: Subscribe, system: ActorSystem)(implicit mat: M
         childName = s"KafkaConsumerActor$consumerId-${subscribe.topics.mkString("-")}",
         minBackoff = subscribe.minBackoff,
         maxBackoff = subscribe.maxBackoff,
-        randomFactor = 0
+        randomFactor = 0.2
       ).withDefaultStoppingStrategy
     )
 
