@@ -3,9 +3,9 @@ package nl.tradecloud.kafka
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.Done
-import akka.actor.{ActorRefFactory, ActorSystem, SupervisorStrategy}
+import akka.actor.{ActorRefFactory, ActorSystem}
 import akka.kafka.ConsumerSettings
-import akka.pattern.BackoffSupervisor
+import akka.pattern.{Backoff, BackoffSupervisor}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Flow
 import nl.tradecloud.kafka.command.Subscribe
@@ -38,9 +38,14 @@ class KafkaSubscriber(subscribe: Subscribe, system: ActorSystem)(implicit mat: M
     val streamCompleted = Promise[Done]
     val consumerProps = KafkaSubscriberActor.props(kafkaConfig, subscribe, flow, consumerSettings, streamCompleted)
 
-    val backoffConsumerProps = BackoffSupervisor.propsWithSupervisorStrategy(
-      consumerProps, s"KafkaConsumerActor$consumerId-${subscribe.topics.mkString("-")}", subscribe.minBackoff,
-      subscribe.maxBackoff, 1.0, SupervisorStrategy.stoppingStrategy
+    val backoffConsumerProps = BackoffSupervisor.props(
+      Backoff.onStop(
+        consumerProps,
+        childName = s"KafkaConsumerActor$consumerId-${subscribe.topics.mkString("-")}",
+        minBackoff = subscribe.minBackoff,
+        maxBackoff = subscribe.maxBackoff,
+        randomFactor = 0
+      ).withDefaultStoppingStrategy
     )
 
     context.actorOf(backoffConsumerProps, s"KafkaBackoffConsumer$consumerId-${subscribe.topics.mkString("-")}")
