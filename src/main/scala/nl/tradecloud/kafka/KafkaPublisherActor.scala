@@ -5,7 +5,7 @@ import akka.kafka.scaladsl.Producer
 import akka.kafka.{ProducerMessage, ProducerSettings}
 import akka.pattern.pipe
 import akka.stream.scaladsl.{Flow, GraphDSL, Sink, Source, Unzip, Zip}
-import akka.stream.{FlowShape, Materializer}
+import akka.stream.{FlowShape, Materializer, OverflowStrategy}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.command.Publish
 import nl.tradecloud.kafka.config.KafkaConfig
@@ -85,8 +85,10 @@ class KafkaPublisherActor(
       builder.add(producerFlow)
     }
 
+    val offsetBuffer = Flow[Publish].buffer(10, OverflowStrategy.backpressure)
+
     unzip.out0 ~> preparer ~> producer ~> zip.in0
-    unzip.out1 ~> zip.in1
+    unzip.out1 ~> offsetBuffer ~> zip.in1
     zip.out ~> completer
 
     FlowShape(unzip.in, completer.out)
