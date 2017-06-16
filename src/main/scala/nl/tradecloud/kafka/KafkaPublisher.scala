@@ -3,7 +3,7 @@ package nl.tradecloud.kafka
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.Done
-import akka.actor.{ActorContext, ActorRef, ActorSystem, Props, SupervisorStrategy}
+import akka.actor.{ActorRefFactory, ActorSystem, Props, SupervisorStrategy}
 import akka.kafka.ProducerSettings
 import akka.pattern.BackoffSupervisor
 import akka.stream.Materializer
@@ -14,7 +14,7 @@ import org.apache.kafka.common.serialization.{ByteArraySerializer, StringSeriali
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: ActorContext) {
+class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaPublisher._
 
   implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
@@ -30,22 +30,14 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
     ProducerSettings(system, keySerializer, valueSerializer).withBootstrapServers(kafkaConfig.brokers)
   }
 
-  private def getOrCreatePublisher(): ActorRef = {
-    val name: String = s"KafkaBackoffPublisher$publisherId"
-
-    context.child(name).getOrElse {
-      val publisherProps: Props = KafkaPublisherActor.props(kafkaConfig, publisherSettings)
-      val backoffPublisherProps: Props = BackoffSupervisor.propsWithSupervisorStrategy(
-        publisherProps, s"KafkaPublisherActor$publisherId", 3.seconds,
-        30.seconds, 1.0, SupervisorStrategy.stoppingStrategy
-      )
-      context.actorOf(backoffPublisherProps, name)
-    }
-  }
+  private val publisherProps: Props = KafkaPublisherActor.props(kafkaConfig, publisherSettings)
+  private val backoffPublisherProps: Props = BackoffSupervisor.propsWithSupervisorStrategy(
+    publisherProps, s"KafkaPublisherActor$publisherId", 3.seconds,
+    30.seconds, 1.0, SupervisorStrategy.stoppingStrategy
+  )
+  private val publishActor = context.actorOf(backoffPublisherProps, s"KafkaBackoffPublisher$publisherId")
 
   def publish(topic: String, msg: AnyRef): Future[Done] = {
-    val publishActor = getOrCreatePublisher()
-
     val completed: Promise[Done] = Promise()
 
     publishActor ! Publish(topic, msg, completed)
