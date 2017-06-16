@@ -43,8 +43,8 @@ class KafkaPublisherSource extends ActorPublisher[Publish] with ActorLogging {
 
 object KafkaPublisherSource {
 
-  def name: String = s"kafka-publisher-source"
+  val name: String = "kafka-publisher-source"
 
-  def props: Props = Props(classOf[KafkaPublisherSource])
+  def props(): Props = Props(new KafkaPublisherSource())
 
 }

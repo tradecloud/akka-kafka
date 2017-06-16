@@ -1,79 +1,59 @@
 package nl.tradecloud.kafka
 
-import akka.actor.SupervisorStrategy.{Escalate, Restart}
+import akka.Done
 import akka.actor._
 import akka.event.LoggingReceive
-import akka.pattern.{Backoff, BackoffSupervisor}
+import akka.pattern.ask
+import akka.stream.scaladsl.Flow
+import akka.stream.{ActorMaterializer, Materializer}
 import nl.tradecloud.kafka.command.{Publish, SubscribeActor}
-import nl.tradecloud.kafka.config.KafkaConfig
 import nl.tradecloud.kafka.failure.KafkaConsumeError
+import nl.tradecloud.kafka.response.SubscribeAck
 
-class KafkaMediator(
-    extendedSystem: ExtendedActorSystem,
-    config: KafkaConfig
-) extends Actor with ActorLogging {
+import scala.concurrent.{ExecutionContext, Future}
 
-  override val supervisorStrategy: OneForOneStrategy =
-    OneForOneStrategy() {
-      case _: KafkaConsumeError => Restart
-      case t =>
-        super.supervisorStrategy.decider.applyOrElse(t, (_: Any) => Escalate)
-    }
+class KafkaMediator(extendedSystem: ExtendedActorSystem) extends Actor with ActorLogging {
+  implicit val materializer: Materializer = ActorMaterializer()
+  implicit val dispatcher: ExecutionContext = extendedSystem.dispatchers.lookup("dispatchers.kafka-dispatcher")
+
+  private val publisher = new KafkaPublisher(extendedSystem)
 
   def receive: Receive = LoggingReceive {
     case cmd: SubscribeActor =>
-      startConsumer(cmd, sender())
+      startConsumer(cmd)
+
+      sender() ! SubscribeAck(cmd)
     case cmd: Publish =>
-      publisher(cmd.topic) forward cmd
+      publisher.publish(cmd.topic, cmd.msg)
   }
 
-  private[this] def publisher(topic: String): ActorRef = {
-    context.child(KafkaPublisherActor.name(topic)).getOrElse {
-      context.actorOf(
-        KafkaPublisherActor.props(
-          extendedSystem = extendedSystem,
-          config = config,
-          topic = topic
-        ),
-        KafkaPublisherActor.name(topic)
-      )
-    }
-  }
+  private[this] def startConsumer(subscribe: SubscribeActor): Future[Done] = {
+    new KafkaSubscriber(subscribe, context.system).atLeastOnce(
+      Flow[KafkaMessage].mapAsync(1) { wrapper =>
+        log.debug("Kafka dispatching msg, msg={}", wrapper.msg)
 
-  private[this] def startConsumer(subscribe: SubscribeActor, subscribeSender: ActorRef): ActorRef = {
-    val consumerProps = KafkaConsumerActor.props(
-      extendedSystem = extendedSystem,
-      config = config,
-      subscribe = subscribe,
-      subscribeSender = subscribeSender
+        subscribe.ref.ask(wrapper.msg)(timeout = subscribe.acknowledgeTimeout).map {
+          case subscribe.acknowledgeMsg =>
+            log.debug("Kafka received acknowledge, msg={}", subscribe.acknowledgeMsg)
+
+            Done
+          case subscribe.retryMsg =>
+            log.warning("Received retry message, msg={}", subscribe.retryMsg)
+
+            throw KafkaConsumeError("Failed to process the message, retrying...")
+          case msg =>
+            log.warning("Unable to process message, msg={}", msg)
+
+            Done
+        }
+      }
     )
-
-    val supervisor = BackoffSupervisor.props(
-      Backoff.onFailure(
-        consumerProps,
-        childName = KafkaConsumerActor.name(subscribe),
-        minBackoff = subscribe.minBackoff,
-        maxBackoff = subscribe.maxBackoff,
-        randomFactor = 0.0
-      )
-    )
-
-    context.actorOf(supervisor)
   }
 }
 
 object KafkaMediator {
   final val name: String = "kafka-mediator"
 
-  def props(
-      extendedSystem: ExtendedActorSystem,
-      config: KafkaConfig
-  ): Props = {
-    Props(
-      classOf[KafkaMediator],
-      extendedSystem,
-      config
-    )
-  }
+  def props(extendedSystem: ExtendedActorSystem): Props = Props(new KafkaMediator(extendedSystem))
 
 }

@@ -8,16 +8,15 @@ Akka extension to publish and subscribe to Kafka topics
 Add the TradeCloud kafka extension dependency in the build.sbt, like:
 ```
 libraryDependencies ++= Seq(
-    "nl.tradecloud" %% "kafka-akka-extension" % "0.22"
+    "nl.tradecloud" %% "kafka-akka-extension" % "0.25"
 )
 ```
 
 Enable the Kafka extension in the application.conf file, like:
 ```
-akka.extensions = ["nl.tradecloud.kafka.KafkaExtension"]
 
 tradecloud.kafka {
-  bootstrapServers = "localhost:9092"
+  brokers = "localhost:9092"
   topicPrefix = ""
 }
 ```
@@ -58,7 +57,10 @@ override def receive: Receive = {
 
 ### Subscribe Stream
 ```
-class SubscribingActor(kafkaConfig: KafkaConfig) extends Actor with ActorLogging with KafkaConsumer {
+class SomeActor() extends Actor with ActorLogging {
+  import context.dispatcher
+
+  implicit val materializer: Materializer = ActorMaterializer()
 
   def receive: Receive = Actor.emptyBehavior
 
@@ -66,23 +68,23 @@ class SubscribingActor(kafkaConfig: KafkaConfig) extends Actor with ActorLogging
     group = "some_subscriber_group",
     topics = Set("some_topic")
   )
-
-  initConsumer(kafkaConfig, subscribe)
-    .mapAsync(1) { msg: KafkaConsumer.KafkaMessage =>
-      log.debug("Dispatching msg={}, max timeout={}", msg, subscribe.acknowledgeTimeout)
-
-      
-      // do something here
-    }
-    .map {
-      // do some other stuff
-    }
-    .mapAsync(1) { msg =>
-      log.info("Committing offset, offset={}", msg.record.offset())
-      msg.committableOffset.commitScaladsl()
-    }
-    .to(Sink.ignore)
-    .run()
+  
+  new KafkaSubscriber(subscribe, context.system).atLeastOnce(
+    Flow[KafkaMessage]
+      .map { wrapper => // extract request
+        wrapper.msg match {
+          case req: SomePublishedMsg =>
+          case req: SomeOtherPublishedMsg =>
+          case ...
+        }
+      }
+      .map {
+        // do some other stuff
+      }
+      .map {
+        Done
+      }
+  )
   
 }
 
@@ -90,7 +92,16 @@ class SubscribingActor(kafkaConfig: KafkaConfig) extends Actor with ActorLogging
 
 ### Publish
 ```
-mediator ! Publish("some_topic", SomeMsgToKafka("Hello World"))
+// promise is completed when publish is added to Kafka
+val completed = Promise[Done]()
+
+mediator ! Publish(
+  topic = "some_topic",
+  msg = SomeMsgToKafka("Hello World"),
+  completed = completed
+)
+
+
 ```
 
 ### Serialization

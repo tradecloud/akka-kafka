@@ -10,7 +10,6 @@ object  Dependencies {
     "com.typesafe.akka"       %% "akka-actor"                 % Version.akka,
     "com.typesafe.akka"       %% "akka-remote"                % Version.akka,
     "com.typesafe.akka"       %% "akka-slf4j"                 % Version.akka,
-    "com.iheart"              %% "ficus"                      % "1.4.0",
     "ch.qos.logback"          %  "logback-classic"            % "1.2.3"           % "test",
     "org.slf4j"               %  "log4j-over-slf4j"           % "1.7.25"          % "test",
     "org.scalatest"           %% "scalatest"                  % "3.0.3"           % "test",
