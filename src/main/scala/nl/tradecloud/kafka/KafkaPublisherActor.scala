@@ -4,7 +4,7 @@ import akka.actor._
 import akka.kafka.scaladsl.Producer
 import akka.kafka.{ProducerMessage, ProducerSettings}
 import akka.pattern.pipe
-import akka.stream.scaladsl.{Flow, GraphDSL, Sink, Source, Unzip, Zip}
+import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Sink, Source, Zip}
 import akka.stream.{FlowShape, Materializer, OverflowStrategy}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.command.Publish
@@ -23,9 +23,6 @@ class KafkaPublisherActor(
     val publisherSource = Source.actorPublisher[Publish](KafkaPublisherSource.props())
 
     val (sourceRef, streamDone) = Flow[Publish]
-      .map { cmd =>
-        (cmd, cmd)
-      }
       .via(publishAndCompleteFlow)
       .runWith(publisherSource, Sink.ignore)
 
@@ -51,7 +48,7 @@ class KafkaPublisherActor(
 
   private val publishAndCompleteFlow = Flow.fromGraph(GraphDSL.create() { implicit builder =>
     import GraphDSL.Implicits._
-    val unzip = builder.add(Unzip[Publish, Publish])
+    val broadcast = builder.add(Broadcast[Publish](2))
     val zip = builder.add(Zip[KafkaProducerResult, Publish])
 
     val completer = {
@@ -87,11 +84,11 @@ class KafkaPublisherActor(
 
     val offsetBuffer = Flow[Publish].buffer(10, OverflowStrategy.backpressure)
 
-    unzip.out0 ~> preparer ~> producer ~> zip.in0
-    unzip.out1 ~> offsetBuffer ~> zip.in1
+    broadcast.out(0) ~> preparer ~> producer ~> zip.in0
+    broadcast.out(1) ~> offsetBuffer ~> zip.in1
     zip.out ~> completer
 
-    FlowShape(unzip.in, completer.out)
+    FlowShape(broadcast.in, completer.out)
   })
 
 }
