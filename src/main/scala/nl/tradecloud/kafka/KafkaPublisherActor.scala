@@ -4,7 +4,7 @@ import akka.actor._
 import akka.kafka.scaladsl.Producer
 import akka.kafka.{ProducerMessage, ProducerSettings}
 import akka.pattern.pipe
-import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Sink, Source, Zip}
+import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Keep, Sink, Source, SourceQueue, Zip}
 import akka.stream.{FlowShape, Materializer, OverflowStrategy}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.command.Publish
@@ -20,21 +20,20 @@ class KafkaPublisherActor(
   log.info("Started publisher for topic={}, prefixedTopic={}")
 
   override def preStart(): Unit = {
-    val publisherSource = Source.actorPublisher[Publish](KafkaPublisherSource.props())
-
-    val (sourceRef, streamDone) = Flow[Publish]
+    val (queue, streamDone) = Source.queue[Publish](1000, OverflowStrategy.backpressure)
       .via(publishAndCompleteFlow)
-      .runWith(publisherSource, Sink.ignore)
+      .toMat(Sink.ignore)(Keep.both)
+      .run()
 
     streamDone pipeTo self
-    context.become(running(sourceRef))
+    context.become(running(queue))
   }
 
   def receive: Receive = Actor.emptyBehavior
 
-  def running(sourceRef: ActorRef): Receive = {
+  def running(queue: SourceQueue[Publish]): Receive = {
     case cmd: Publish =>
-      sourceRef forward cmd
+      queue.offer(cmd)
     case Status.Failure(e) =>
       log.error("Kafka publisher interrupted due to failure: [{}]", e)
       throw e
