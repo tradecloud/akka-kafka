@@ -115,22 +115,20 @@ object KafkaSubscriberActor {
   def deserializeFlow(system: ActorSystem, log: LoggingAdapter): Flow[Array[Byte], KafkaMessage, NotUsed] = {
     Flow[Array[Byte]]
       .mapConcat { msg: Array[Byte] =>
-        log.debug("Kafka deserializing")
-
         try {
-          List(
-            KafkaMessage(
-              msg = KafkaMessageSerializer.deserialize(
-                system,
-                messageProtocol = SerializedMessage.parseFrom(msg)
-              )
-            )
-          )
+          val deserializedMsg = KafkaMessageSerializer.deserialize(system, SerializedMessage.parseFrom(msg))
+
+          List(KafkaMessage(deserializedMsg))
         } catch {
           case e: Throwable =>
             log.error(e, "Kafka message not deserializable, resuming...")
             Nil
         }
+      }
+      .map { wrappedMsg =>
+        log.debug("Received msg, msg={}", wrappedMsg.msg)
+
+        wrappedMsg
       }
   }
 }
