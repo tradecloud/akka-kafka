@@ -114,8 +114,8 @@ object KafkaSubscriberActor {
 
   def deserializeFlow(system: ActorSystem, log: LoggingAdapter): Flow[Array[Byte], KafkaMessage, NotUsed] = {
     Flow[Array[Byte]]
-      .map { msg: Array[Byte] =>
-        log.debug("Kafka trying to deserialize msg, msg={}", msg)
+      .mapConcat { msg: Array[Byte] =>
+        log.debug("Kafka deserializing")
 
         try {
           List(
@@ -132,6 +132,5 @@ object KafkaSubscriberActor {
             Nil
         }
       }
-      .mapConcat(identity)
   }
 }
