@@ -10,7 +10,6 @@ import akka.stream.Materializer
 import akka.stream.scaladsl.Flow
 import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
-import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -31,7 +30,6 @@ class KafkaSubscriber(subscribe: Subscribe, system: ActorSystem)(implicit mat: M
     ConsumerSettings(system, keyDeserializer, valueDeserializer)
       .withBootstrapServers(kafkaConfig.brokers)
       .withGroupId(subscribe.group)
-      .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
       // Consumer must have a unique clientId otherwise a javax.management.InstanceAlreadyExistsException is thrown
       .withClientId(s"${subscribe.serviceName}-$consumerId")
   }
