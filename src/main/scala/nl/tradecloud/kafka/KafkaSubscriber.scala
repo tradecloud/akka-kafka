@@ -32,6 +32,8 @@ class KafkaSubscriber(subscribe: Subscribe, system: ActorSystem)(implicit mat: M
       .withBootstrapServers(kafkaConfig.brokers)
       .withGroupId(subscribe.group)
       .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+      // Consumer must have a unique clientId otherwise a javax.management.InstanceAlreadyExistsException is thrown
+      .withClientId(s"${subscribe.serviceName}-$consumerId")
   }
 
   def atLeastOnce(flow: Flow[KafkaMessage, Done, _]): Future[Done] = {

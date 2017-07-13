@@ -6,6 +6,7 @@ import nl.tradecloud.kafka.response.{PubSubAck, PubSubRetry}
 import scala.concurrent.duration.{FiniteDuration, _}
 
 sealed trait Subscribe {
+  def serviceName: String
   def group: String
   def topics: Set[String]
   def offsetBuffer: Int
@@ -16,6 +17,7 @@ sealed trait Subscribe {
 }
 
 case class SubscribeStream(
+    serviceName: String,
     group: String,
     topics: Set[String],
     minBackoff: FiniteDuration = 3.seconds,
@@ -26,6 +28,7 @@ case class SubscribeStream(
 ) extends Subscribe
 
 case class SubscribeActor(
+    serviceName: String,
     group: String,
     topics: Set[String],
     ref: ActorRef,

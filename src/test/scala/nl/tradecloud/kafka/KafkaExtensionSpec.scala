@@ -42,6 +42,7 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
       val receiverProbe = TestProbe("receiver")
 
       val subscribeCmd = SubscribeActor(
+        serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
         ref = receiverProbe.ref,
