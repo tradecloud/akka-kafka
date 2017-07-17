@@ -72,7 +72,10 @@ private[kafka] class KafkaSubscriberActor(
           .groupedWithin(subscribe.batchingSize, subscribe.batchingInterval)
           .map(group => group.foldLeft(CommittableOffsetBatch.empty) { (batch, elem) => batch.updated(elem._1) })
           // parallelism set to 3 for no good reason other than because the akka team has seen good throughput with this value
-          .mapAsync(parallelism = 3)(_.commitScaladsl())
+          .mapAsync(parallelism = 3) { msg =>
+            log.debug("Committing offset")
+            msg.commitScaladsl()
+          }
         builder.add(commitFlow)
       }
 

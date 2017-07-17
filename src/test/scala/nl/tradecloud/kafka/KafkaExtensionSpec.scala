@@ -33,6 +33,7 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
   }
 
   val defaultTimeout = FiniteDuration(60, TimeUnit.SECONDS)
+  val defaultNegativeTimeout = FiniteDuration(15, TimeUnit.SECONDS)
   val mediator: ActorRef = KafkaExtension(system).mediator
   val log: LoggingAdapter = system.log
 
@@ -41,7 +42,8 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
       val subscriberProbe = TestProbe("subscriber")
       val receiverProbe = TestProbe("receiver")
 
-      val subscribeCmd = SubscribeActor(
+      // subscribe to topic
+      val subscribeCmd1 = SubscribeActor(
         serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
@@ -50,15 +52,10 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
         minBackoff = 3.seconds,
         maxBackoff = 10.seconds
       )
-
-      subscriberProbe.send(mediator, subscribeCmd)
-      subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd))
-
-      // wait 10 seconds to start the consumer
-      Thread.sleep(10000)
+      subscriberProbe.send(mediator, subscribeCmd1)
+      subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd1))
 
       val completedPublish1 = Promise[Done]()
-
       mediator ! Publish(
         topic = "test_topic_0",
         msg = "Hello0",
@@ -83,6 +80,36 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
           receiverProbe.reply(PubSubAck)
           completedPublish2.isCompleted === true
       }
+
+      // subscribe with different group
+      val subscribeCmd2 = SubscribeActor(
+        serviceName = "test",
+        group = "test_group_1",
+        topics = Set("test_topic_0"),
+        ref = receiverProbe.ref,
+        acknowledgeTimeout = 10.seconds,
+        minBackoff = 3.seconds,
+        maxBackoff = 10.seconds
+      )
+      subscriberProbe.send(mediator, subscribeCmd2)
+      subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd2))
+
+      receiverProbe.expectMsgPF(defaultTimeout) {
+        case "Hello0" =>
+          receiverProbe.reply(PubSubAck)
+          completedPublish1.isCompleted === true
+      }
+
+      receiverProbe.expectMsgPF(defaultTimeout) {
+        case "Hello1" =>
+          receiverProbe.reply(PubSubAck)
+          completedPublish2.isCompleted === true
+      }
+
+      // subscribe with same group
+      subscriberProbe.send(mediator, subscribeCmd1)
+      subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd1))
+      receiverProbe.expectNoMsg(defaultNegativeTimeout)
     }
   }
 
