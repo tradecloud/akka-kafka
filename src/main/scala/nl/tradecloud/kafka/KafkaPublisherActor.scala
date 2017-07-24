@@ -53,6 +53,7 @@ class KafkaPublisherActor(
     val completer = {
       val completerFlow = Flow[(KafkaProducerResult, Publish)]
           .map { cmd =>
+            log.debug("Kafka published cmd={} to topic={}", cmd._2.msg, cmd._2.topic)
             cmd._2.completed.success(Done)
             Done
           }
@@ -65,7 +66,7 @@ class KafkaPublisherActor(
         .map { cmd: Publish =>
           val prefixedTopic: String = kafkaConfig.topicPrefix + cmd.topic
 
-          log.debug("Kafka publishing cmd={}, topic={}", cmd, prefixedTopic)
+          log.debug("Kafka publishing cmd={} to topic={}", cmd, prefixedTopic)
 
           val msg = KafkaMessageSerializer.serialize(context.system, message = cmd.msg).toByteArray
 
