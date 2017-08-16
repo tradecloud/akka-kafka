@@ -9,7 +9,6 @@ sealed trait Subscribe {
   def serviceName: String
   def group: String
   def topics: Set[String]
-  def offsetBuffer: Int
   def minBackoff: FiniteDuration
   def maxBackoff: FiniteDuration
   def batchingSize: Int
@@ -23,8 +22,7 @@ case class SubscribeStream(
     minBackoff: FiniteDuration = 3.seconds,
     maxBackoff: FiniteDuration = 30.seconds,
     batchingSize: Int = 1,
-    batchingInterval: FiniteDuration = 3.seconds,
-    offsetBuffer: Int = 10
+    batchingInterval: FiniteDuration = 3.seconds
 ) extends Subscribe
 
 case class SubscribeActor(
@@ -38,6 +36,5 @@ case class SubscribeActor(
     minBackoff: FiniteDuration = 3.seconds,
     maxBackoff: FiniteDuration = 30.seconds,
     batchingSize: Int = 1,
-    batchingInterval: FiniteDuration = 3.seconds,
-    offsetBuffer: Int = 10
+    batchingInterval: FiniteDuration = 3.seconds
 ) extends Subscribe
