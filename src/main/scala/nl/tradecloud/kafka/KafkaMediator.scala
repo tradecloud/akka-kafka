@@ -36,7 +36,7 @@ class KafkaMediator(extendedSystem: ExtendedActorSystem) extends Actor with Acto
           case subscribe.acknowledgeMsg =>
             log.debug("Kafka received acknowledge, msg={}", subscribe.acknowledgeMsg)
 
-            Done
+            wrapper.offset
           case subscribe.retryMsg =>
             log.warning("Received retry message, msg={}", subscribe.retryMsg)
 
@@ -44,7 +44,7 @@ class KafkaMediator(extendedSystem: ExtendedActorSystem) extends Actor with Acto
           case msg =>
             log.warning("Unable to process message, msg={}", msg)
 
-            Done
+            wrapper.offset
         }
       }
     )

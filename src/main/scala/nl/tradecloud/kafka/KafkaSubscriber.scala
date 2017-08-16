@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import akka.Done
 import akka.actor.{ActorRefFactory, ActorSystem}
+import akka.kafka.ConsumerMessage.CommittableOffset
 import akka.kafka.ConsumerSettings
 import akka.pattern.{Backoff, BackoffSupervisor}
 import akka.stream.Materializer
@@ -36,7 +37,7 @@ class KafkaSubscriber(subscribe: Subscribe, system: ActorSystem)(implicit mat: M
       .withClientId(s"${subscribe.serviceName}-$consumerId")
   }
 
-  def atLeastOnce(flow: Flow[KafkaMessage, Done, _]): Future[Done] = {
+  def atLeastOnce(flow: Flow[KafkaMessage, CommittableOffset, _]): Future[Done] = {
     val streamCompleted = Promise[Done]
     val consumerProps = KafkaSubscriberActor.props(kafkaConfig, subscribe, flow, consumerSettings, streamCompleted)
 
