@@ -28,7 +28,16 @@ class KafkaMediator(extendedSystem: ExtendedActorSystem) extends Actor with Acto
   }
 
   private[this] def startConsumer(subscribe: SubscribeActor): Future[Done] = {
-    new KafkaSubscriber(subscribe, context.system).atLeastOnce(
+    new KafkaSubscriber(
+      serviceName = subscribe.serviceName,
+      group = subscribe.group,
+      topics = subscribe.topics,
+      minBackoff = subscribe.minBackoff,
+      maxBackoff = subscribe.maxBackoff,
+      batchingSize = subscribe.batchingSize,
+      batchingInterval = subscribe.batchingInterval,
+      system = extendedSystem
+    ).atLeastOnce(
       Flow[KafkaMessage].mapAsync(1) { wrapper =>
         log.debug("Kafka dispatching msg, msg={}", wrapper.msg)
 

@@ -9,16 +9,21 @@ import akka.remote.WireFormats.SerializedMessage
 import akka.stream._
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.{Done, NotUsed}
-import nl.tradecloud.kafka.command.Subscribe
 import nl.tradecloud.kafka.config.KafkaConfig
 
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Promise}
 
 private[kafka] class KafkaSubscriberActor(
-    kafkaConfig: KafkaConfig, subscribe: Subscribe, flow: Flow[KafkaMessage, CommittableOffset, _],
-    consumerSettings: ConsumerSettings[String, Array[Byte]], streamCompleted: Promise[Done]
+    kafkaConfig: KafkaConfig,
+    flow: Flow[KafkaMessage, CommittableOffset, _],
+    topics: Set[String],
+    batchingSize: Int,
+    batchingInterval: FiniteDuration,
+    consumerSettings: ConsumerSettings[String, Array[Byte]],
+    streamCompleted: Promise[Done]
 )(implicit mat: Materializer, ec: ExecutionContext) extends Actor with ActorLogging {
-  private val prefixedTopics: Set[String] = subscribe.topics.map(kafkaConfig.topicPrefix + _)
+  private val prefixedTopics: Set[String] = topics.map(kafkaConfig.topicPrefix + _)
 
   log.debug("Kafka subscriber started for topics {}", prefixedTopics.mkString(", "))
 
@@ -76,7 +81,7 @@ private[kafka] class KafkaSubscriberActor(
 
   private val commitFlow = {
     Flow[CommittableOffset]
-      .groupedWithin(subscribe.batchingSize, subscribe.batchingInterval)
+      .groupedWithin(batchingSize, batchingInterval)
       .map(group => group.foldLeft(CommittableOffsetBatch.empty) { (batch, elem) => batch.updated(elem) })
       // parallelism set to 3 for no good reason other than because the akka team has seen good throughput with this value
       .mapAsync(parallelism = 3) { msg =>
@@ -99,14 +104,22 @@ object KafkaSubscriberActor {
 
   def props(
       kafkaConfig: KafkaConfig,
-      subscribe: Subscribe, flow: Flow[KafkaMessage, CommittableOffset, _],
+      flow: Flow[KafkaMessage, CommittableOffset, _],
+      topics: Set[String],
+      batchingSize: Int,
+      batchingInterval: FiniteDuration,
       consumerSettings: ConsumerSettings[String, Array[Byte]],
       streamCompleted: Promise[Done]
   )(implicit mat: Materializer, ec: ExecutionContext): Props = {
     Props(
       new KafkaSubscriberActor(
-        kafkaConfig, subscribe, flow,
-        consumerSettings, streamCompleted
+        kafkaConfig = kafkaConfig,
+        flow = flow,
+        topics = topics,
+        batchingSize = batchingSize,
+        batchingInterval = batchingInterval,
+        consumerSettings = consumerSettings,
+        streamCompleted = streamCompleted
       )
     )
   }
