@@ -10,13 +10,17 @@ import akka.pattern.{Backoff, BackoffSupervisor}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Flow
 import nl.tradecloud.kafka.command.Subscribe
-import nl.tradecloud.kafka.config.KafkaConfig
+import nl.tradecloud.kafka.config.{ConsumerOffset, KafkaConfig}
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-class KafkaSubscriber(subscribe: Subscribe, system: ActorSystem)(implicit mat: Materializer, context: ActorRefFactory) {
+class KafkaSubscriber(
+    subscribe: Subscribe,
+    system: ActorSystem,
+    offset: ConsumerOffset.Value = ConsumerOffset.earliest
+)(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaSubscriber._
 
   implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
@@ -32,7 +36,7 @@ class KafkaSubscriber(subscribe: Subscribe, system: ActorSystem)(implicit mat: M
     ConsumerSettings(system, keyDeserializer, valueDeserializer)
       .withBootstrapServers(kafkaConfig.brokers)
       .withGroupId(subscribe.group)
-      .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+      .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offset.toString)
       // Consumer must have a unique clientId otherwise a javax.management.InstanceAlreadyExistsException is thrown
       .withClientId(s"${subscribe.serviceName}-$consumerId")
   }
