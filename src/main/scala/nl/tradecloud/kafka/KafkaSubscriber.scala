@@ -29,7 +29,7 @@ class KafkaSubscriber(
 )(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaSubscriber._
 
-  implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
+  private[this] implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
 
   private val kafkaConfig = KafkaConfig(system.settings.config)
 

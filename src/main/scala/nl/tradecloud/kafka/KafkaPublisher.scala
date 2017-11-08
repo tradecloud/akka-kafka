@@ -17,10 +17,8 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaPublisher._
 
-  implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
-
-  val kafkaConfig = KafkaConfig(system.settings.config)
-
+  private[this] implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
+  private val kafkaConfig = KafkaConfig(system.settings.config)
   private lazy val publisherId = KafkaClientIdSequenceNumber.getAndIncrement
 
   private def publisherSettings = {
