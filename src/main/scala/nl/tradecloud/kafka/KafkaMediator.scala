@@ -24,7 +24,7 @@ class KafkaMediator(extendedSystem: ExtendedActorSystem) extends Actor with Acto
 
       sender() ! SubscribeAck(cmd)
     case cmd: Publish =>
-      publisher.publish(cmd.topic, cmd.msg).onComplete(cmd.completed.complete)
+      cmd.completed.completeWith(publisher.publish(cmd.topic, cmd.msg))
   }
 
   private[this] def startConsumer(subscribe: SubscribeActor): Future[Done] = {
