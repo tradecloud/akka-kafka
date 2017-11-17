@@ -8,7 +8,7 @@ Akka extension to publish and subscribe to Kafka topics
 Add the TradeCloud kafka extension dependency in the build.sbt, like:
 ```
 libraryDependencies ++= Seq(
-    "nl.tradecloud" %% "kafka-akka-extension" % "0.33"
+    "nl.tradecloud" %% "kafka-akka-extension" % "0.38"
 )
 ```
 
@@ -57,50 +57,36 @@ override def receive: Receive = {
 
 ### Subscribe Stream
 ```
-class SomeActor() extends Actor with ActorLogging {
-  import context.dispatcher
 
-  implicit val materializer: Materializer = ActorMaterializer()
+implicit val materializer: Materializer = ActorMaterializer()
 
-  def receive: Receive = Actor.emptyBehavior
-
-  val subscribe: Subscribe = SubscribeStream(
-    group = "some_subscriber_group",
-    topics = Set("some_topic")
-  )
-  
-  new KafkaSubscriber(subscribe, context.system).atLeastOnce(
+new KafkaSubscriber(
+    serviceName = "my_example_service",
+    group = "some_group_name",
+    topics = Set("some_topic"),
+    minBackoff = 15.seconds,
+    maxBackoff = 3.minutes,
+    system = actorSystem
+  ).atLeastOnce(
     Flow[KafkaMessage]
-      .map { wrapper => // extract request
-        wrapper.msg match {
-          case req: SomePublishedMsg =>
-          case req: SomeOtherPublishedMsg =>
-          case ...
-        }
-      }
-      .map {
-        // do some other stuff
-      }
-      .map {
-        Done
+      .map { msg: KafkaMessage =>
+        // do something
+        
+        // return the offset
+        msg.offset
       }
   )
-  
-}
 
 ```
 
 ### Publish
 ```
 // promise is completed when publish is added to Kafka
-val completed = Promise[Done]()
+implicit val materializer: Materializer = ActorMaterializer()
 
-mediator ! Publish(
-  topic = "some_topic",
-  msg = SomeMsgToKafka("Hello World"),
-  completed = completed
-)
+val publisher = new KafkaPublisher(actorSystem)
 
+publisher.publish(msg)
 
 ```
 
