@@ -25,7 +25,7 @@ class KafkaSubscriber(
     batchingSize: Int = 1,
     batchingInterval: FiniteDuration = 3.seconds,
     system: ActorSystem,
-    offset: ConsumerOffset.Value = ConsumerOffset.earliest
+    offset: ConsumerOffset.Value = ConsumerOffset.latest
 )(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaSubscriber._
 
