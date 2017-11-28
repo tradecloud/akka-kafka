@@ -2,11 +2,11 @@ import sbt._
 
 object  Dependencies {
   object Version {
-    val akka = "2.5.6"
+    val akka = "2.5.7"
   }
 
   val common = Seq(
-    "com.typesafe.akka"       %% "akka-stream-kafka"          % "0.17",
+    "com.typesafe.akka"       %% "akka-stream-kafka"          % "0.18",
     "com.typesafe.akka"       %% "akka-actor"                 % Version.akka,
     "com.typesafe.akka"       %% "akka-remote"                % Version.akka,
     "com.typesafe.akka"       %% "akka-slf4j"                 % Version.akka,
