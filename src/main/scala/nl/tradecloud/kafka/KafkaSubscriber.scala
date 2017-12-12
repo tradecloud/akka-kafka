@@ -62,14 +62,14 @@ class KafkaSubscriber(
     val backoffConsumerProps = BackoffSupervisor.props(
       Backoff.onStop(
         consumerProps,
-        childName = s"KafkaConsumerActor$consumerId-${topics.mkString("-")}",
+        childName = s"KafkaConsumerActor$consumerId",
         minBackoff = minBackoff,
         maxBackoff = maxBackoff,
         randomFactor = 0.2
       ).withDefaultStoppingStrategy
     )
 
-    context.actorOf(backoffConsumerProps, s"KafkaBackoffConsumer$consumerId-${topics.mkString("-")}")
+    context.actorOf(backoffConsumerProps, s"KafkaBackoffConsumer$consumerId")
 
     streamCompleted.future
   }
