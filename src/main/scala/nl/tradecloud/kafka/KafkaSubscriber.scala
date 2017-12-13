@@ -41,7 +41,7 @@ class KafkaSubscriber(
 
     ConsumerSettings(system, keyDeserializer, valueDeserializer)
       .withBootstrapServers(kafkaConfig.brokers)
-      .withGroupId(group)
+      .withGroupId(kafkaConfig.groupPrefix + group)
       .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offset.toString)
       // Consumer must have a unique clientId otherwise a javax.management.InstanceAlreadyExistsException is thrown
       .withClientId(s"$serviceName-$consumerId")
