@@ -56,7 +56,9 @@ class KafkaSubscriber(
       batchingSize = batchingSize,
       batchingInterval = batchingInterval,
       consumerSettings = consumerSettings,
-      streamCompleted = streamCompleted
+      streamCompleted = streamCompleted,
+      minBackoff = minBackoff,
+      maxBackoff = maxBackoff
     )
 
     val backoffConsumerProps = BackoffSupervisor.props(

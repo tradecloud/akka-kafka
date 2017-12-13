@@ -7,7 +7,7 @@ import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.pattern.pipe
 import akka.remote.WireFormats.SerializedMessage
 import akka.stream._
-import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
+import akka.stream.scaladsl.{Flow, Keep, RestartFlow, Sink, Source}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.config.KafkaConfig
 
@@ -21,7 +21,9 @@ private[kafka] class KafkaSubscriberActor(
     batchingSize: Int,
     batchingInterval: FiniteDuration,
     consumerSettings: ConsumerSettings[String, Array[Byte]],
-    streamCompleted: Promise[Done]
+    streamCompleted: Promise[Done],
+    minBackoff: FiniteDuration,
+    maxBackoff: FiniteDuration
 )(implicit mat: Materializer, ec: ExecutionContext) extends Actor with ActorLogging {
   private val prefixedTopics: Set[String] = topics.map(kafkaConfig.topicPrefix + _)
 
@@ -94,7 +96,11 @@ private[kafka] class KafkaSubscriberActor(
     ReactiveConsumer.committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
       .map(committableMessage => (committableMessage.committableOffset, committableMessage.record.value))
       .via(deserializeFlow)
-      .via(flow)
+      .via {
+        RestartFlow.withBackoff(minBackoff, maxBackoff, 0.2) { () =>
+          flow
+        }
+      }
       .via(commitFlow)
   }
 
@@ -109,7 +115,9 @@ object KafkaSubscriberActor {
       batchingSize: Int,
       batchingInterval: FiniteDuration,
       consumerSettings: ConsumerSettings[String, Array[Byte]],
-      streamCompleted: Promise[Done]
+      streamCompleted: Promise[Done],
+      minBackoff: FiniteDuration,
+      maxBackoff: FiniteDuration
   )(implicit mat: Materializer, ec: ExecutionContext): Props = {
     Props(
       new KafkaSubscriberActor(
@@ -119,7 +127,9 @@ object KafkaSubscriberActor {
         batchingSize = batchingSize,
         batchingInterval = batchingInterval,
         consumerSettings = consumerSettings,
-        streamCompleted = streamCompleted
+        streamCompleted = streamCompleted,
+        minBackoff = minBackoff,
+        maxBackoff = maxBackoff
       )
     )
   }
