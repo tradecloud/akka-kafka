@@ -98,7 +98,11 @@ private[kafka] class KafkaSubscriberActor(
       .via(deserializeFlow)
       .via {
         RestartFlow.withBackoff(minBackoff, maxBackoff, 0.2) { () =>
-          flow
+          flow.recover {
+            case e: Throwable =>
+              log.error(e, "exception in atLeastOnce flow")
+              throw e
+          }
         }
       }
       .via(commitFlow)
