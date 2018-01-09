@@ -7,7 +7,7 @@ import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.pattern.pipe
 import akka.remote.WireFormats.SerializedMessage
 import akka.stream._
-import akka.stream.scaladsl.{Flow, Keep, RestartFlow, Sink, Source}
+import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.config.KafkaConfig
 
@@ -96,15 +96,7 @@ private[kafka] class KafkaSubscriberActor(
     ReactiveConsumer.committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
       .map(committableMessage => (committableMessage.committableOffset, committableMessage.record.value))
       .via(deserializeFlow)
-      .via {
-        RestartFlow.withBackoff(minBackoff, maxBackoff, 0.2) { () =>
-          flow.recover {
-            case e: Throwable =>
-              log.error(e, "exception in atLeastOnce flow")
-              throw e
-          }
-        }
-      }
+      .via(flow)
       .via(commitFlow)
   }
 
