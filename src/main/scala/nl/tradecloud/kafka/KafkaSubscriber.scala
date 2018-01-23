@@ -49,7 +49,7 @@ class KafkaSubscriber(
   }
 
   def atLeastOnce(flow: Flow[KafkaMessage, CommittableOffset, _])(implicit timeout: Timeout): Future[Done] = {
-    val streamCompleted = Promise[Done]
+    val streamSubscribed = Promise[Done]
     val consumerProps = KafkaSubscriberActor.props(
       kafkaConfig = kafkaConfig,
       flow = flow,
@@ -57,7 +57,7 @@ class KafkaSubscriber(
       batchingSize = batchingSize,
       batchingInterval = batchingInterval,
       consumerSettings = consumerSettings,
-      streamCompleted = streamCompleted,
+      streamSubscribed = streamSubscribed,
       minBackoff = minBackoff,
       maxBackoff = maxBackoff
     )
@@ -76,7 +76,7 @@ class KafkaSubscriber(
 
     Future.firstCompletedOf(
       Seq(
-        streamCompleted.future,
+        streamSubscribed.future,
         after(timeout.duration, system.scheduler)(Future.failed(new TimeoutException("Future timed out!")))
       )
     )

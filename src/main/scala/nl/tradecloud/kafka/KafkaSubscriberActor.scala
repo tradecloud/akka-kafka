@@ -21,7 +21,7 @@ private[kafka] class KafkaSubscriberActor(
     batchingSize: Int,
     batchingInterval: FiniteDuration,
     consumerSettings: ConsumerSettings[String, Array[Byte]],
-    streamCompleted: Promise[Done],
+    streamSubscribed: Promise[Done],
     minBackoff: FiniteDuration,
     maxBackoff: FiniteDuration
 )(implicit mat: Materializer, ec: ExecutionContext) extends Actor with ActorLogging {
@@ -42,7 +42,6 @@ private[kafka] class KafkaSubscriberActor(
       throw e
     case Done =>
       log.info("Kafka subscriber stream for topics {} was completed.", prefixedTopics.mkString(", "))
-      streamCompleted.success(Done)
       context.stop(self)
   }
 
@@ -58,6 +57,8 @@ private[kafka] class KafkaSubscriberActor(
     shutdown = Some(killSwitch)
     streamDone pipeTo self
     context.become(running)
+
+    streamSubscribed.success(Done)
   }
 
   private val deserializeFlow: Flow[(CommittableOffset, Array[Byte]), KafkaMessage, NotUsed] = {
@@ -111,7 +112,7 @@ object KafkaSubscriberActor {
       batchingSize: Int,
       batchingInterval: FiniteDuration,
       consumerSettings: ConsumerSettings[String, Array[Byte]],
-      streamCompleted: Promise[Done],
+      streamSubscribed: Promise[Done],
       minBackoff: FiniteDuration,
       maxBackoff: FiniteDuration
   )(implicit mat: Materializer, ec: ExecutionContext): Props = {
@@ -123,7 +124,7 @@ object KafkaSubscriberActor {
         batchingSize = batchingSize,
         batchingInterval = batchingInterval,
         consumerSettings = consumerSettings,
-        streamCompleted = streamCompleted,
+        streamSubscribed = streamSubscribed,
         minBackoff = minBackoff,
         maxBackoff = maxBackoff
       )
