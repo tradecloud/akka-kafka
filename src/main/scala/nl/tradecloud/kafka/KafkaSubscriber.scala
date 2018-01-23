@@ -6,15 +6,16 @@ import akka.Done
 import akka.actor.{ActorRefFactory, ActorSystem}
 import akka.kafka.ConsumerMessage.CommittableOffset
 import akka.kafka.ConsumerSettings
-import akka.pattern.{Backoff, BackoffSupervisor}
+import akka.pattern.{Backoff, BackoffSupervisor, after}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Flow
+import akka.util.Timeout
 import nl.tradecloud.kafka.config.{ConsumerOffset, KafkaConfig}
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
 
 class KafkaSubscriber(
     serviceName: String,
@@ -47,7 +48,7 @@ class KafkaSubscriber(
       .withClientId(s"$serviceName-$consumerId")
   }
 
-  def atLeastOnce(flow: Flow[KafkaMessage, CommittableOffset, _]): Future[Done] = {
+  def atLeastOnce(flow: Flow[KafkaMessage, CommittableOffset, _])(implicit timeout: Timeout): Future[Done] = {
     val streamCompleted = Promise[Done]
     val consumerProps = KafkaSubscriberActor.props(
       kafkaConfig = kafkaConfig,
@@ -73,7 +74,12 @@ class KafkaSubscriber(
 
     context.actorOf(backoffConsumerProps, s"KafkaBackoffConsumer$consumerId")
 
-    streamCompleted.future
+    Future.firstCompletedOf(
+      Seq(
+        streamCompleted.future,
+        after(timeout.duration, system.scheduler)(Future.failed(new TimeoutException("Future timed out!")))
+      )
+    )
   }
 
 }

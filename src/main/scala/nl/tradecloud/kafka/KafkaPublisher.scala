@@ -5,14 +5,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import akka.Done
 import akka.actor.{ActorRefFactory, ActorSystem, Props, SupervisorStrategy}
 import akka.kafka.ProducerSettings
-import akka.pattern.BackoffSupervisor
+import akka.pattern.{BackoffSupervisor, after}
 import akka.stream.Materializer
+import akka.util.Timeout
 import nl.tradecloud.kafka.command.Publish
 import nl.tradecloud.kafka.config.KafkaConfig
 import org.apache.kafka.common.serialization.{ByteArraySerializer, StringSerializer}
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
 
 class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaPublisher._
@@ -35,12 +36,17 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
   )
   private val publishActor = context.actorOf(backoffPublisherProps, s"KafkaBackoffPublisher$publisherId")
 
-  def publish(topic: String, msg: AnyRef): Future[Done] = {
+  def publish(topic: String, msg: AnyRef)(implicit timeout: Timeout): Future[Done] = {
     val completed: Promise[Done] = Promise()
 
     publishActor ! Publish(topic, msg, completed)
 
-    completed.future
+    Future.firstCompletedOf(
+      Seq(
+        completed.future,
+        after(timeout.duration, system.scheduler)(Future.failed(new TimeoutException("Future timed out!")))
+      )
+    )
   }
 
 }
