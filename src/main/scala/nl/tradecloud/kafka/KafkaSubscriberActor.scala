@@ -58,9 +58,7 @@ private[kafka] class KafkaSubscriberActor(
     streamDone pipeTo self
     context.become(running)
 
-    if (!streamSubscribed.isCompleted) {
-      streamSubscribed.success(Done)
-    }
+    streamSubscribed.trySuccess(Done)
   }
 
   private val deserializeFlow: Flow[(CommittableOffset, Array[Byte]), KafkaMessage, NotUsed] = {

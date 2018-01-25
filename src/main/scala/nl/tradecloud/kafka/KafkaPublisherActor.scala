@@ -54,9 +54,8 @@ class KafkaPublisherActor(
       val completerFlow = Flow[(KafkaProducerResult, Publish)]
           .map { cmd =>
             log.debug("Kafka published cmd={} to topic={}", cmd._2.msg, cmd._2.topic)
-            if (!cmd._2.completed.isCompleted) {
-              cmd._2.completed.success(Done)
-            }
+            // complete promise
+            cmd._2.completed.trySuccess(Done)
             Done
           }
 
