@@ -4,4 +4,4 @@ import akka.Done
 
 import scala.concurrent.Promise
 
-case class Publish(topic: String, msg: AnyRef, completed: Promise[Done])
+case class Publish(topic: String, msg: AnyRef, completed: Promise[Done], retry: Boolean = true)

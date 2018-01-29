@@ -35,10 +35,10 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
   )
   private val publishActor = context.actorOf(backoffPublisherProps, s"KafkaBackoffPublisher$publisherId")
 
-  def publish(topic: String, msg: AnyRef): Future[Done] = {
+  def publish(topic: String, msg: AnyRef, retry: Boolean = false): Future[Done] = {
     val completed: Promise[Done] = Promise()
 
-    publishActor ! Publish(topic, msg, completed)
+    publishActor ! Publish(topic, msg, completed, retry)
 
     Future.firstCompletedOf(
       Seq(

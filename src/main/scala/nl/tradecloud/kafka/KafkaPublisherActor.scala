@@ -29,6 +29,18 @@ class KafkaPublisherActor(
     context.become(running(queue))
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    // retry with same message
+    message.foreach {
+      case msg: Publish if msg.retry =>
+        log.info("resending failed msg={}", msg)
+        self.tell(msg, sender())
+      case _ => // do nothing
+    }
+
+    super.preRestart(reason, message)
+  }
+
   def receive: Receive = Actor.emptyBehavior
 
   def running(queue: SourceQueue[Publish]): Receive = {

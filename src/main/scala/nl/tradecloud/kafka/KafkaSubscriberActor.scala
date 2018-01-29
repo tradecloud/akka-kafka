@@ -72,6 +72,7 @@ private[kafka] class KafkaSubscriberActor(
         } catch {
           case e: Throwable =>
             log.error(e, "Kafka message not deserializable, resuming...")
+            //offset.commitScaladsl()
             Nil
         }
       }
