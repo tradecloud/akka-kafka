@@ -25,7 +25,10 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
     val keySerializer = new StringSerializer
     val valueSerializer = new ByteArraySerializer
 
-    ProducerSettings(system, keySerializer, valueSerializer).withBootstrapServers(kafkaConfig.brokers)
+    ProducerSettings(system, keySerializer, valueSerializer)
+      .withBootstrapServers(kafkaConfig.brokers)
+      .withProperty("retries", kafkaConfig.publishRetries.toString)
+      .withProperty("retry.backoff.ms", kafkaConfig.publishRetryBackoff.toMillis.toString)
   }
 
   private val publisherProps: Props = KafkaPublisherActor.props(kafkaConfig, publisherSettings)
@@ -35,10 +38,10 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
   )
   private val publishActor = context.actorOf(backoffPublisherProps, s"KafkaBackoffPublisher$publisherId")
 
-  def publish(topic: String, msg: AnyRef, retry: Boolean = false): Future[Done] = {
+  def publish(topic: String, msg: AnyRef): Future[Done] = {
     val completed: Promise[Done] = Promise()
 
-    publishActor ! Publish(topic, msg, completed, retry)
+    publishActor ! Publish(topic, msg, completed)
 
     Future.firstCompletedOf(
       Seq(

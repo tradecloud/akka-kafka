@@ -10,6 +10,8 @@ sealed trait KafkaConfig {
   def groupPrefix: String
   def defaultPublishTimeout: FiniteDuration
   def defaultConsumeTimeout: FiniteDuration
+  def publishRetries: Long
+  def publishRetryBackoff: FiniteDuration
 }
 
 object KafkaConfig {
@@ -21,5 +23,7 @@ object KafkaConfig {
     val groupPrefix: String = conf.getString("groupPrefix")
     val defaultPublishTimeout: FiniteDuration = Duration.fromNanos(conf.getDuration("defaultPublishTimeout").toNanos)
     val defaultConsumeTimeout: FiniteDuration = Duration.fromNanos(conf.getDuration("defaultConsumeTimeout").toNanos)
+    val publishRetries: Long = conf.getLong("publishRetries")
+    val publishRetryBackoff: FiniteDuration = Duration.fromNanos(conf.getDuration("publishRetryBackoff").toNanos)
   }
 }

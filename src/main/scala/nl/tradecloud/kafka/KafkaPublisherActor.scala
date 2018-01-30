@@ -4,8 +4,8 @@ import akka.actor._
 import akka.kafka.scaladsl.Producer
 import akka.kafka.{ProducerMessage, ProducerSettings}
 import akka.pattern.pipe
+import akka.stream._
 import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Keep, Sink, Source, SourceQueue, Zip}
-import akka.stream.{FlowShape, Materializer, OverflowStrategy}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.command.Publish
 import nl.tradecloud.kafka.config.KafkaConfig
@@ -27,18 +27,6 @@ class KafkaPublisherActor(
 
     streamDone pipeTo self
     context.become(running(queue))
-  }
-
-  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
-    // retry with same message
-    message.foreach {
-      case msg: Publish if msg.retry =>
-        log.info("resending failed msg={}", msg)
-        self.tell(msg, sender())
-      case _ => // do nothing
-    }
-
-    super.preRestart(reason, message)
   }
 
   def receive: Receive = Actor.emptyBehavior
