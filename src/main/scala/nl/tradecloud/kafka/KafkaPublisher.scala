@@ -6,7 +6,7 @@ import akka.actor.{ActorRefFactory, ActorSystem, Props, SupervisorStrategy}
 import akka.event.{Logging, LoggingAdapter}
 import akka.kafka.scaladsl.Producer
 import akka.kafka.{ProducerMessage, ProducerSettings}
-import akka.pattern.BackoffSupervisor
+import akka.pattern.{BackoffSupervisor, after}
 import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Zip}
 import akka.stream.{FlowShape, Materializer, OverflowStrategy}
 import akka.{Done, NotUsed}
@@ -16,7 +16,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.{ByteArraySerializer, StringSerializer}
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
 
 class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaPublisher._
@@ -108,7 +108,13 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
 
     publishActor ! Publish(topic, msg, completed)
 
-    completed.future
+    // the promise should be completed first in case of failure, the following code functions as fail-safe
+    Future.firstCompletedOf(
+      Seq(
+        completed.future,
+        after(kafkaConfig.defaultPublishTimeout.plus(1.second), system.scheduler)(Future.failed(new TimeoutException("Future timed out!")))
+      )
+    )
   }
 
 }
