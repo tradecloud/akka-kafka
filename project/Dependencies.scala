@@ -2,7 +2,7 @@ import sbt._
 
 object  Dependencies {
   object Version {
-    val akka = "2.5.9"
+    val akka = "2.5.11"
   }
 
   val common = Seq(
@@ -14,7 +14,7 @@ object  Dependencies {
     "org.slf4j"               %  "log4j-over-slf4j"           % "1.7.25"          % "test",
     "org.scalatest"           %% "scalatest"                  % "3.0.5"           % "test",
     "com.typesafe.akka"       %% "akka-testkit"               % Version.akka      % "test",
-    "net.manub"               %% "scalatest-embedded-kafka"   % "1.0.0"           % "test" exclude("log4j", "log4j")
+    "net.manub"               %% "scalatest-embedded-kafka"   % "1.1.0"           % "test" exclude("log4j", "log4j")
   )
 
 }

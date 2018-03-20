@@ -72,7 +72,7 @@ private[kafka] class KafkaSubscriberActor(
         } catch {
           case e: Throwable =>
             log.error(e, "Kafka message not deserializable, resuming...")
-            //offset.commitScaladsl()
+            offset.commitScaladsl()
             Nil
         }
       }
@@ -89,8 +89,11 @@ private[kafka] class KafkaSubscriberActor(
       .map(group => group.foldLeft(CommittableOffsetBatch.empty) { (batch, elem) => batch.updated(elem) })
       // parallelism set to 3 for no good reason other than because the akka team has seen good throughput with this value
       .mapAsync(parallelism = 3) { msg =>
-        log.debug("Committing offset")
-        msg.commitScaladsl()
+      log.debug("Committing offset, msg={}", msg)
+        msg.commitScaladsl().map { result =>
+          log.debug("Committed offset, msg={}", msg)
+          result
+        }
       }
   }
 
