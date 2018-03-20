@@ -1,18 +1,18 @@
-# Kafka Akka Extension
+# Kafka Akka
 [![Build Status](https://travis-ci.org/tradecloud/kafka-akka-extension.svg?branch=master)](https://travis-ci.org/tradecloud/kafka-akka-extension) [![Maven Central](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12/badge.svg)](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12) [![License](http://img.shields.io/:license-mit-blue.svg)](http://doge.mit-license.org)
 
 A wrapper around [Akka's reactive kafka](https://github.com/akka/reactive-kafka) providing resilience and re-use of Akka defined serialization for Kafka messages.
 
 ## Configuration
 
-Add the TradeCloud kafka extension dependency in the build.sbt, like:
+Add the dependency in the build.sbt, like:
 ```
 libraryDependencies ++= Seq(
     "nl.tradecloud" %% "kafka-akka-extension" % "0.52.1"
 )
 ```
 
-Enable the Kafka extension in the application.conf file, like:
+Configure in the application.conf file, like:
 ```
 
 tradecloud.kafka {
