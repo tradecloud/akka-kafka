@@ -8,7 +8,7 @@ A wrapper around [Akka's reactive kafka](https://github.com/akka/reactive-kafka)
 Add the TradeCloud kafka extension dependency in the build.sbt, like:
 ```
 libraryDependencies ++= Seq(
-    "nl.tradecloud" %% "kafka-akka-extension" % "0.49"
+    "nl.tradecloud" %% "kafka-akka-extension" % "0.52.1"
 )
 ```
 
@@ -25,37 +25,7 @@ As this library is a wrapper around [Akka's reactive kafka](https://github.com/a
 
 ## Usage
 
-### Subscribe Actor
-```
-val mediator = KafkaExtension(context.system).mediator
-
-mediator ! SubscribeActor(
-  group = "some_group",
-  topics = Set("some_topic"),
-  ref = self,
-  acknowledgeMsg = "Ack",
-  retryMsg = "Retry",
-  acknowledgeTimeout = 10.seconds,
-  minBackoff = 3.seconds,
-  maxBackoff = 10.seconds
-)
-
-override def receive: Receive = {
-    case ack: SubscribeAck =>
-      log.debug("Received subscribe ack!")
-   case msg: SomeMsgFromKafka =>
-      log.info("Received SomeMsgFromKafka={}", msg)
-      val kafkaConsumer = sender()
-      
-      (someOtherActor ? msg).map {
-        case Success => kafkaConsumer ! "Ack"
-        case TempIOFailure => kafkaConsumer ! "Retry"
-        case PermanentFailure => kafkaConsumer ! "Failure"
-      }
-   ...
-```
-
-### Subscribe Stream
+### Subscribe
 ```
 
 implicit val materializer: Materializer = ActorMaterializer()
