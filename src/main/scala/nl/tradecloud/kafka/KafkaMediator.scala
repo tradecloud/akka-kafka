@@ -7,6 +7,7 @@ import akka.pattern.ask
 import akka.stream.scaladsl.Flow
 import akka.stream.{ActorMaterializer, Materializer}
 import nl.tradecloud.kafka.command.{Publish, SubscribeActor}
+import nl.tradecloud.kafka.config.ConsumerOffset
 import nl.tradecloud.kafka.failure.KafkaConsumeError
 import nl.tradecloud.kafka.response.SubscribeAck
 
@@ -36,7 +37,8 @@ class KafkaMediator(extendedSystem: ExtendedActorSystem) extends Actor with Acto
       maxBackoff = subscribe.maxBackoff,
       batchingSize = subscribe.batchingSize,
       batchingInterval = subscribe.batchingInterval,
-      system = extendedSystem
+      system = extendedSystem,
+      offset = ConsumerOffset.earliest
     ).atLeastOnce(
       Flow[KafkaMessage].mapAsync(1) { wrapper =>
         log.debug("Kafka dispatching msg, msg={}", wrapper.msg)

@@ -6,10 +6,10 @@ object  Dependencies {
   }
 
   val common = Seq(
-    "com.typesafe.akka"       %% "akka-stream-kafka"          % "0.19",
-    "com.typesafe.akka"       %% "akka-actor"                 % Version.akka,
-    "com.typesafe.akka"       %% "akka-remote"                % Version.akka,
-    "com.typesafe.akka"       %% "akka-slf4j"                 % Version.akka,
+    "com.typesafe.akka"       %% "akka-stream-kafka"          % "0.20"            % "compile",
+    "com.typesafe.akka"       %% "akka-actor"                 % Version.akka      % "compile",
+    "com.typesafe.akka"       %% "akka-remote"                % Version.akka      % "compile",
+    "com.typesafe.akka"       %% "akka-slf4j"                 % Version.akka      % "compile",
     "ch.qos.logback"          %  "logback-classic"            % "1.2.3"           % "test",
     "org.slf4j"               %  "log4j-over-slf4j"           % "1.7.25"          % "test",
     "org.scalatest"           %% "scalatest"                  % "3.0.5"           % "test",

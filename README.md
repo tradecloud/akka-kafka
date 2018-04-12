@@ -8,7 +8,7 @@ A wrapper around [Akka's reactive kafka](https://github.com/akka/reactive-kafka)
 Add the dependency in the build.sbt, like:
 ```
 libraryDependencies ++= Seq(
-    "nl.tradecloud" %% "kafka-akka-extension" % "0.52.1"
+    "nl.tradecloud" %% "kafka-akka-extension" % "0.52.3"
 )
 ```
 
@@ -36,7 +36,8 @@ new KafkaSubscriber(
     topics = Set("some_topic"),
     minBackoff = 15.seconds,
     maxBackoff = 3.minutes,
-    system = actorSystem
+    system = actorSystem,
+    offset = ConsumerOffset.latest
   ).atLeastOnce(
     Flow[KafkaMessage]
       .map { msg: KafkaMessage =>
