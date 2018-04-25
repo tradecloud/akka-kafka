@@ -125,7 +125,6 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
   )
   private val publishActor = context.actorOf(backoffPublisherProps, s"KafkaBackoffPublisher$publisherId")
 
-  @deprecated("use the serializeAndPublishFlow whenever possible")
   def publish(topic: String, msg: AnyRef): Future[Done] = {
     val completed: Promise[Done] = Promise()
 

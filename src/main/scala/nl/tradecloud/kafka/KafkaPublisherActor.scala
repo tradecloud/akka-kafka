@@ -14,17 +14,12 @@ class KafkaPublisherActor(
     kafkaConfig: KafkaConfig,
     publishFlow: Flow[Publish, Done, NotUsed]
 )(implicit mat: Materializer, ec: ExecutionContext) extends Actor with ActorLogging {
-  log.info("Started publisher for topic={}, prefixedTopic={}")
 
-  override def preStart(): Unit = {
-    val (queue, streamDone) = Source.queue[Publish](1000, OverflowStrategy.backpressure)
-      .via(publishFlow)
-      .toMat(Sink.ignore)(Keep.both)
-      .run()
+  private var shutdown: Option[KillSwitch] = None
 
-    streamDone pipeTo self
-    context.become(running(queue))
-  }
+  override def preStart(): Unit = run()
+
+  override def postStop(): Unit = shutdown.foreach(_.shutdown())
 
   def receive: Receive = Actor.emptyBehavior
 
@@ -37,6 +32,18 @@ class KafkaPublisherActor(
     case Done =>
       log.info("Kafka publisher stream was completed.")
       context.stop(self)
+  }
+
+  private def run(): Unit = {
+    val ((queue, killSwitch), streamDone) = Source.queue[Publish](1000, OverflowStrategy.backpressure)
+      .via(publishFlow)
+      .viaMat(KillSwitches.single)(Keep.both)
+      .toMat(Sink.ignore)(Keep.both)
+      .run()
+
+    shutdown = Some(killSwitch)
+    streamDone pipeTo self
+    context.become(running(queue))
   }
 }
 

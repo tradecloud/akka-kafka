@@ -3,14 +3,13 @@ package nl.tradecloud.kafka
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.Done
-import akka.actor.{ActorRefFactory, ActorSystem}
+import akka.actor.{ActorRefFactory, ActorSystem, SupervisorStrategy}
 import akka.kafka.ConsumerMessage.CommittableOffset
 import akka.kafka.ConsumerSettings
-import akka.pattern.{Backoff, BackoffSupervisor, after}
+import akka.pattern.{BackoffSupervisor, after}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Flow
-import nl.tradecloud.kafka.config.{ConsumerOffset, KafkaConfig}
-import org.apache.kafka.clients.consumer.ConsumerConfig
+import nl.tradecloud.kafka.config.KafkaConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
 import scala.concurrent.duration._
@@ -25,7 +24,7 @@ class KafkaSubscriber(
     batchingSize: Int = 1,
     batchingInterval: FiniteDuration = 3.seconds,
     system: ActorSystem,
-    offset: ConsumerOffset.Value
+    configurationProperties: Seq[(String, String)] = Seq.empty
 )(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaSubscriber._
 
@@ -41,9 +40,9 @@ class KafkaSubscriber(
     ConsumerSettings(system, keyDeserializer, valueDeserializer)
       .withBootstrapServers(kafkaConfig.brokers)
       .withGroupId(kafkaConfig.groupPrefix + group)
-      .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offset.toString)
       // Consumer must have a unique clientId otherwise a javax.management.InstanceAlreadyExistsException is thrown
       .withClientId(s"$serviceName-$consumerId")
+      .withProperties(configurationProperties:_*)
   }
 
   def atLeastOnce(flow: Flow[KafkaMessage, CommittableOffset, _]): Future[Done] = {
@@ -60,14 +59,13 @@ class KafkaSubscriber(
       maxBackoff = maxBackoff
     )
 
-    val backoffConsumerProps = BackoffSupervisor.props(
-      Backoff.onStop(
-        consumerProps,
-        childName = s"KafkaConsumerActor$consumerId",
-        minBackoff = minBackoff,
-        maxBackoff = maxBackoff,
-        randomFactor = 0.2
-      ).withDefaultStoppingStrategy
+    val backoffConsumerProps = BackoffSupervisor.propsWithSupervisorStrategy(
+      consumerProps,
+      childName = s"KafkaConsumerActor$consumerId",
+      minBackoff = minBackoff,
+      maxBackoff = maxBackoff,
+      randomFactor = 0.2,
+      strategy = SupervisorStrategy.stoppingStrategy
     )
 
     context.actorOf(backoffConsumerProps, s"KafkaBackoffConsumer$consumerId")
