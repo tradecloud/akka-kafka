@@ -6,7 +6,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Flow
 import akka.testkit.{TestKit, TestProbe}
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
-import nl.tradecloud.kafka.config.ConsumerOffset
+import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, WordSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -42,8 +42,8 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
         serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
-        initialOffset = Some(ConsumerOffset.earliest),
-        system = system
+        system = system,
+        configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
       ).atLeastOnce(
         Flow[KafkaMessage].map { msg =>
           receiverProbe.ref ! msg.msg
@@ -69,8 +69,8 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
         serviceName = "test",
         group = "test_group_1",
         topics = Set("test_topic_0"),
-        initialOffset = Some(ConsumerOffset.earliest),
-        system = system
+        system = system,
+        configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
       ).atLeastOnce(
         Flow[KafkaMessage].map { msg =>
           receiverProbe.ref ! msg.msg
@@ -87,8 +87,8 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
         serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
-        initialOffset = Some(ConsumerOffset.earliest),
-        system = system
+        system = system,
+        configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
       ).atLeastOnce(
         Flow[KafkaMessage].map { msg =>
           receiverProbe.ref ! msg
