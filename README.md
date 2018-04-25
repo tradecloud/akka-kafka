@@ -8,7 +8,7 @@ A wrapper around [Akka's reactive kafka](https://github.com/akka/reactive-kafka)
 Add the dependency in the build.sbt, like:
 ```
 libraryDependencies ++= Seq(
-    "nl.tradecloud" %% "kafka-akka-extension" % "0.52.3"
+    "nl.tradecloud" %% "kafka-akka-extension" % "0.53"
 )
 ```
 
@@ -18,6 +18,7 @@ Configure in the application.conf file, like:
 tradecloud.kafka {
   brokers = "localhost:9092"
   topicPrefix = ""
+  groupPrefix = ""
 }
 ```
 
@@ -36,8 +37,7 @@ new KafkaSubscriber(
     topics = Set("some_topic"),
     minBackoff = 15.seconds,
     maxBackoff = 3.minutes,
-    system = actorSystem,
-    offset = ConsumerOffset.latest
+    system = actorSystem
   ).atLeastOnce(
     Flow[KafkaMessage]
       .map { msg: KafkaMessage =>
@@ -57,7 +57,7 @@ implicit val materializer: Materializer = ActorMaterializer()
 
 val publisher = new KafkaPublisher(actorSystem)
 
-publisher.publish(msg)
+publisher.publish("topic",msg)
 
 ```
 
