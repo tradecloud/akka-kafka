@@ -1,17 +1,16 @@
 package nl.tradecloud.kafka
 
-import akka.Done
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.event.LoggingAdapter
 import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.Flow
 import akka.testkit.{TestKit, TestProbe}
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
-import nl.tradecloud.kafka.command.{Publish, SubscribeActor}
-import nl.tradecloud.kafka.response.{PubSubAck, SubscribeAck}
+import nl.tradecloud.kafka.config.ConsumerOffset
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, WordSpecLike}
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContextExecutor, Promise}
 
 class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with WordSpecLike with BeforeAndAfterAll with BeforeAndAfterEach {
 
@@ -32,81 +31,72 @@ class KafkaExtensionSpec extends TestKit(ActorSystem("KafkaExtensionSpec")) with
 
   val defaultTimeout: FiniteDuration = 60.seconds
   val defaultNegativeTimeout: FiniteDuration = 15.seconds
-  val mediator: ActorRef = KafkaExtension(system).mediator
   val log: LoggingAdapter = system.log
 
   "The KafkaExtension" must {
     "be able to subscribe to a topic" in {
-      val subscriberProbe = TestProbe("subscriber")
       val receiverProbe = TestProbe("receiver")
+      val publisher = new KafkaPublisher(system)
 
-      // subscribe to topic
-      val subscribeCmd1 = SubscribeActor(
+      new KafkaSubscriber(
         serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
-        ref = receiverProbe.ref,
-        acknowledgeTimeout = 10.seconds,
-        minBackoff = 3.seconds,
-        maxBackoff = 10.seconds
-      )
-      subscriberProbe.send(mediator, subscribeCmd1)
-      subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd1))
+        initialOffset = Some(ConsumerOffset.earliest),
+        system = system
+      ).atLeastOnce(
+        Flow[KafkaMessage].map { msg =>
+          receiverProbe.ref ! msg.msg
 
-      val completedPublish1 = Promise[Done]()
-      mediator ! Publish(
+          msg.offset
+        }
+      )
+
+      publisher.publish(
         topic = "test_topic_0",
-        msg = "Hello0",
-        completed = completedPublish1
+        msg = "Hello0"
       )
+      receiverProbe.expectMsg(defaultTimeout, "Hello0")
 
-      receiverProbe.expectMsgPF(defaultTimeout) {
-        case "Hello0" =>
-          receiverProbe.reply(PubSubAck)
-          completedPublish1.isCompleted === true
-      }
-
-      val completedPublish2 = Promise[Done]()
-      mediator ! Publish(
+      publisher.publish(
         topic = "test_topic_0",
-        msg = "Hello1",
-        completed = completedPublish2
+        msg = "Hello1"
       )
-
-      receiverProbe.expectMsgPF(defaultTimeout) {
-        case "Hello1" =>
-          receiverProbe.reply(PubSubAck)
-          completedPublish2.isCompleted === true
-      }
+      receiverProbe.expectMsg(defaultTimeout, "Hello1")
 
       // subscribe with different group
-      val subscribeCmd2 = SubscribeActor(
+      new KafkaSubscriber(
         serviceName = "test",
         group = "test_group_1",
         topics = Set("test_topic_0"),
-        ref = receiverProbe.ref,
-        acknowledgeTimeout = 10.seconds,
-        minBackoff = 3.seconds,
-        maxBackoff = 10.seconds
+        initialOffset = Some(ConsumerOffset.earliest),
+        system = system
+      ).atLeastOnce(
+        Flow[KafkaMessage].map { msg =>
+          receiverProbe.ref ! msg.msg
+
+          msg.offset
+        }
       )
-      subscriberProbe.send(mediator, subscribeCmd2)
-      subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd2))
 
-      receiverProbe.expectMsgPF(defaultTimeout) {
-        case "Hello0" =>
-          receiverProbe.reply(PubSubAck)
-          completedPublish1.isCompleted === true
-      }
+      receiverProbe.expectMsg(defaultTimeout, "Hello0")
+      receiverProbe.expectMsg(defaultTimeout, "Hello1")
 
-      receiverProbe.expectMsgPF(defaultTimeout) {
-        case "Hello1" =>
-          receiverProbe.reply(PubSubAck)
-          completedPublish2.isCompleted === true
-      }
+      // start subscriber with same profile as 1st subscriber
+      new KafkaSubscriber(
+        serviceName = "test",
+        group = "test_group_0",
+        topics = Set("test_topic_0"),
+        initialOffset = Some(ConsumerOffset.earliest),
+        system = system
+      ).atLeastOnce(
+        Flow[KafkaMessage].map { msg =>
+          receiverProbe.ref ! msg
 
-      // subscribe with same group
-      subscriberProbe.send(mediator, subscribeCmd1)
-      subscriberProbe.expectMsg(defaultTimeout, SubscribeAck(subscribeCmd1))
+          msg.offset
+        }
+      )
+
       receiverProbe.expectNoMessage(defaultNegativeTimeout)
     }
   }
