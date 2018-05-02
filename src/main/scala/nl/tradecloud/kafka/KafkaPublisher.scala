@@ -2,7 +2,7 @@ package nl.tradecloud.kafka
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.{ActorRefFactory, ActorSystem, Props, SupervisorStrategy}
+import akka.actor.{ActorRef, ActorRefFactory, ActorSystem, Props, SupervisorStrategy}
 import akka.event.{Logging, LoggingAdapter}
 import akka.kafka.scaladsl.Producer
 import akka.kafka.{ProducerMessage, ProducerSettings}
@@ -23,8 +23,8 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
   val log: LoggingAdapter = Logging(system, this.getClass)
 
   private[this] implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
-  private val kafkaConfig = KafkaConfig(system.settings.config)
-  private lazy val publisherId = KafkaClientIdSequenceNumber.getAndIncrement
+  private[this] val kafkaConfig = KafkaConfig(system.settings.config)
+
   private def publisherSettings = {
     val keySerializer = new StringSerializer
     val valueSerializer = new ByteArraySerializer
@@ -117,13 +117,21 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
     })
   }
 
+  val publisherId: Int = KafkaClientIdSequenceNumber.getAndIncrement
+  val publisherActorName: String = "KafkaPublisherActor" + publisherId
+  val publisherBackoffActorName: String = "KafkaBackoffPublisher" + publisherId
+
   // create the publish actor with exponential backoff supervision
   private val publisherProps: Props = KafkaPublisherActor.props(kafkaConfig, publishWithCallbackFlow(withRetries = true, defaultPublishCallback))
   private val backoffPublisherProps: Props = BackoffSupervisor.propsWithSupervisorStrategy(
-    publisherProps, s"KafkaPublisherActor$publisherId", 3.seconds,
-    30.seconds, 1.0, SupervisorStrategy.stoppingStrategy
+    childProps = publisherProps,
+    childName = publisherActorName,
+    minBackoff = 3.seconds,
+    maxBackoff = 30.seconds,
+    randomFactor = 1.0,
+    strategy = SupervisorStrategy.stoppingStrategy
   )
-  private val publishActor = context.actorOf(backoffPublisherProps, s"KafkaBackoffPublisher$publisherId")
+  private val publishActor: ActorRef = context.actorOf(backoffPublisherProps, publisherBackoffActorName)
 
   def publish(topic: String, msg: AnyRef): Future[Done] = {
     val completed: Promise[Done] = Promise()

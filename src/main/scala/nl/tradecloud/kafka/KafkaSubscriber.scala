@@ -29,11 +29,10 @@ class KafkaSubscriber(
   import KafkaSubscriber._
 
   private[this] implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
+  private[this] val kafkaConfig = KafkaConfig(system.settings.config)
 
-  private val kafkaConfig = KafkaConfig(system.settings.config)
-  private lazy val consumerId = KafkaClientIdSequenceNumber.getAndIncrement
-
-  private def consumerSettings = {
+  val consumerId: Int = KafkaClientIdSequenceNumber.getAndIncrement
+  val consumerSettings: ConsumerSettings[String, Array[Byte]] = {
     val keyDeserializer = new StringDeserializer
     val valueDeserializer = new ByteArrayDeserializer
 
@@ -44,6 +43,8 @@ class KafkaSubscriber(
       .withClientId(s"$serviceName-$consumerId")
       .withProperties(configurationProperties:_*)
   }
+  val consumerActorName: String =  "KafkaConsumerActor" + consumerId
+  val consumerBackoffActorName: String =  "KafkaBackoffConsumer" + consumerId
 
   def atLeastOnce(flow: Flow[KafkaMessage, CommittableOffset, _]): Future[Done] = {
     val streamSubscribed = Promise[Done]
@@ -61,14 +62,14 @@ class KafkaSubscriber(
 
     val backoffConsumerProps = BackoffSupervisor.propsWithSupervisorStrategy(
       consumerProps,
-      childName = s"KafkaConsumerActor$consumerId",
+      childName = consumerActorName,
       minBackoff = minBackoff,
       maxBackoff = maxBackoff,
       randomFactor = 0.2,
       strategy = SupervisorStrategy.stoppingStrategy
     )
 
-    context.actorOf(backoffConsumerProps, s"KafkaBackoffConsumer$consumerId")
+    context.actorOf(backoffConsumerProps, consumerBackoffActorName)
 
     Future.firstCompletedOf(
       Seq(
