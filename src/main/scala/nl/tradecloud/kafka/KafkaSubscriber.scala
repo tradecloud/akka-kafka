@@ -2,13 +2,15 @@ package nl.tradecloud.kafka
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.Done
 import akka.actor.{ActorRefFactory, ActorSystem, SupervisorStrategy}
-import akka.kafka.ConsumerMessage.CommittableOffset
-import akka.kafka.ConsumerSettings
+import akka.event.Logging
+import akka.kafka.ConsumerMessage.{CommittableOffset, CommittableOffsetBatch}
+import akka.kafka.scaladsl.Consumer
+import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.pattern.{BackoffSupervisor, after}
 import akka.stream.Materializer
-import akka.stream.scaladsl.Flow
+import akka.stream.scaladsl.{Flow, Source}
+import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.config.KafkaConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
@@ -30,7 +32,9 @@ class KafkaSubscriber(
 
   private[this] implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
   private[this] val kafkaConfig = KafkaConfig(system.settings.config)
+  private[this] val log = Logging(system, this.getClass)
 
+  val serializer: KafkaMessageSerializer = new KafkaMessageSerializer(system)
   val consumerId: Int = KafkaClientIdSequenceNumber.getAndIncrement
   val consumerSettings: ConsumerSettings[String, Array[Byte]] = {
     val keyDeserializer = new StringDeserializer
@@ -45,19 +49,42 @@ class KafkaSubscriber(
   }
   val consumerActorName: String =  "KafkaConsumerActor" + consumerId
   val consumerBackoffActorName: String =  "KafkaBackoffConsumer" + consumerId
+  val prefixedTopics: Set[String] = topics.map(kafkaConfig.topicPrefix + _)
+
+  val consumerSource: Source[(CommittableOffset, Array[Byte]), Consumer.Control] = {
+    Consumer
+      .committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
+      .map(committableMessage => (committableMessage.committableOffset, committableMessage.record.value))
+  }
+
+  val commitFlow: Flow[CommittableOffset, Done, NotUsed] = {
+    Flow[CommittableOffset]
+      .groupedWithin(batchingSize, batchingInterval)
+      .map(group => group.foldLeft(CommittableOffsetBatch.empty) { (batch, elem) => batch.updated(elem) })
+      .mapAsync(parallelism = 3) { msg =>
+        log.debug("Committing offset, msg={}", msg)
+
+        msg.commitScaladsl().map { result =>
+          log.debug("Committed offset, msg={}", msg)
+          result
+        }
+      }
+  }
 
   def atLeastOnce(flow: Flow[KafkaMessage, CommittableOffset, _]): Future[Done] = {
     val streamSubscribed = Promise[Done]
+
+    val consumerStream: Source[Done, Consumer.Control] = consumerSource
+      .via(serializer.deserializeFlow)
+      .via(flow)
+      .via(commitFlow)
+
     val consumerProps = KafkaSubscriberActor.props(
-      kafkaConfig = kafkaConfig,
-      flow = flow,
-      topics = topics,
+      consumerStream = consumerStream,
+      topics = prefixedTopics,
       batchingSize = batchingSize,
       batchingInterval = batchingInterval,
-      consumerSettings = consumerSettings,
-      streamSubscribed = streamSubscribed,
-      minBackoff = minBackoff,
-      maxBackoff = maxBackoff
+      streamSubscribed = streamSubscribed
     )
 
     val backoffConsumerProps = BackoffSupervisor.propsWithSupervisorStrategy(

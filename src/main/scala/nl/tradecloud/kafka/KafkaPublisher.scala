@@ -12,7 +12,6 @@ import akka.stream.{FlowShape, Materializer, OverflowStrategy}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.command.Publish
 import nl.tradecloud.kafka.config.KafkaConfig
-import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.{ByteArraySerializer, StringSerializer}
 
 import scala.concurrent.duration._
@@ -20,8 +19,7 @@ import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
 
 class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: ActorRefFactory) {
   import KafkaPublisher._
-  val log: LoggingAdapter = Logging(system, this.getClass)
-
+  private[this] val log: LoggingAdapter = Logging(system, this.getClass)
   private[this] implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
   private[this] val kafkaConfig = KafkaConfig(system.settings.config)
 
@@ -32,16 +30,7 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
     ProducerSettings(system, keySerializer, valueSerializer).withBootstrapServers(kafkaConfig.brokers)
   }
 
-  // serialize the msg to array[byte]
-  private val serializerFlow: Flow[Publish, KafkaProducerMessage, NotUsed] = {
-    Flow[Publish].map { cmd: Publish =>
-      val prefixedTopic: String = kafkaConfig.topicPrefix + cmd.topic
-      log.debug("Kafka publishing cmd={} to topic={}", cmd, prefixedTopic)
-      val msg = KafkaMessageSerializer.serialize(system, message = cmd.msg).toByteArray
-
-      new KafkaProducerMessage(new ProducerRecord[String, Array[Byte]](prefixedTopic, msg), NotUsed)
-    }
-  }
+  private val serializer = new KafkaMessageSerializer(system)
 
   // publishing to kafka
   private def publishFlow(withRetries: Boolean): Flow[KafkaProducerMessage, KafkaProducerResult, NotUsed] = {
@@ -69,24 +58,29 @@ class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: A
     }
   }
 
+  private val topicPrefixFlow: Flow[Publish, Publish, NotUsed] = Flow[Publish].map(cmd => cmd.copy(topic = kafkaConfig.topicPrefix + cmd.topic))
+
   // serialize messages, publish and get the publish command back when finished
   def serializeAndPublishFlow(withRetries: Boolean): Flow[Publish, Publish, NotUsed] = {
     Flow.fromGraph(GraphDSL.create() { implicit builder =>
       import GraphDSL.Implicits._
 
       // prepare elems
+      val prefixFlowShape = builder.add(topicPrefixFlow)
       val broadcast = builder.add(Broadcast[Publish](2))
       val zip = builder.add(Zip[KafkaProducerResult, Publish])
-      val publishCmdBufferFlow = publishCommandBufferFlow(withRetries)
+      val publishCmdBufferFlow =  builder.add(publishCommandBufferFlow(withRetries))
       val resultTransformerShape = builder.add(resultTransformerFlow)
+      val serializerFlow = builder.add(serializer.serializerFlow)
 
       // connect the graph
+      prefixFlowShape ~> broadcast.in
       broadcast.out(0) ~> serializerFlow ~> publishFlow(withRetries) ~> zip.in0
       broadcast.out(1) ~> publishCmdBufferFlow ~> zip.in1
       zip.out ~> resultTransformerShape
 
       // expose ports
-      FlowShape(broadcast.in, resultTransformerShape.out)
+      FlowShape(prefixFlowShape.in, resultTransformerShape.out)
     })
   }
 

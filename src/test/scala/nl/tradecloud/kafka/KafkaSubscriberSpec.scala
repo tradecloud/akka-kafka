@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Flow
 import akka.testkit.{TestKit, TestProbe}
+import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, WordSpecLike}
@@ -11,7 +12,9 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, WordSpecLike}
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
-class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec")) with WordSpecLike with BeforeAndAfterAll with BeforeAndAfterEach {
+class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", ConfigFactory.load("application-test")))
+  with WordSpecLike with BeforeAndAfterAll with BeforeAndAfterEach {
+
   private implicit val mat: ActorMaterializer = ActorMaterializer()(system)
   private implicit val ec: ExecutionContextExecutor = system.dispatcher
   private implicit val embeddedKafkaConfig: EmbeddedKafkaConfig = EmbeddedKafkaConfig(9092, 2181)
