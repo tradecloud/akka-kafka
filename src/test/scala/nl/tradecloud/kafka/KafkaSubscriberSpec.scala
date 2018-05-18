@@ -1,5 +1,6 @@
 package nl.tradecloud.kafka
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Flow
@@ -33,8 +34,8 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
     super.afterAll()
   }
 
-  "The KafkaSubscriber" must {
-    "be able to subscribe to a topic" in {
+  "The KafkaSubscriber" should {
+    "consume from a topic" in {
       val receiverProbe = TestProbe("receiver")
       val publisher = new KafkaPublisher(system)
 
@@ -47,7 +48,7 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       )
 
       subscriber1.atLeastOnce(
-        Flow[KafkaMessage].map { msg =>
+        Flow[KafkaMessage[String]].map { msg =>
           receiverProbe.ref ! msg.msg
 
           msg.offset
@@ -76,7 +77,7 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       )
 
       subscriber2.atLeastOnce(
-        Flow[KafkaMessage].map { msg =>
+        Flow[KafkaMessage[String]].map { msg =>
           receiverProbe.ref ! msg.msg
 
           msg.offset
@@ -96,13 +97,40 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       )
 
       subscriber3.atLeastOnce(
-        Flow[KafkaMessage].map { msg =>
+        Flow[KafkaMessage[String]].map { msg =>
           receiverProbe.ref ! msg
 
           msg.offset
         }
       )
 
+      receiverProbe.expectNoMessage(defaultNegativeTimeout)
+    }
+
+    "drop messages with an invalid type" in {
+      val receiverProbe = TestProbe("receiver")
+      val publisher = new KafkaPublisher(system)
+
+      val subscriber = new KafkaSubscriber(
+        serviceName = "test",
+        group = "test_group_0",
+        topics = Set("test_topic_5"),
+        system = system,
+        configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
+      )
+
+      subscriber.atLeastOnce[String](
+        Flow[KafkaMessage[String]].map { msg =>
+          receiverProbe.ref ! msg.msg
+
+          msg.offset
+        }
+      )
+
+      publisher.publish(
+        topic = "test_topic_5",
+        msg = Done
+      )
       receiverProbe.expectNoMessage(defaultNegativeTimeout)
     }
   }

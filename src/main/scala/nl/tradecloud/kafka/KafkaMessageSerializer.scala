@@ -23,7 +23,7 @@ class KafkaMessageSerializer(system: ActorSystem) {
   /**
    * Uses Akka Serialization for the specified ActorSystem to transform the given MessageProtocol to a message
    */
-  def deserialize(messageProtocol: SerializedMessage): AnyRef = {
+  def deserialize(messageProtocol: SerializedMessage): Any = {
     serialization.deserialize(
       messageProtocol.getMessage.toByteArray,
       messageProtocol.getSerializerId,
@@ -31,7 +31,7 @@ class KafkaMessageSerializer(system: ActorSystem) {
     ).get
   }
 
-  def deserializeFlow: Flow[(CommittableOffset, Array[Byte]), KafkaMessage, NotUsed] = {
+  def deserializeFlow: Flow[(CommittableOffset, Array[Byte]), KafkaMessage[Any], NotUsed] = {
     Flow[(CommittableOffset, Array[Byte])]
       .mapConcat { case (offset: CommittableOffset, rawMsg: Array[Byte]) =>
         log.debug("de-serializing message, rawMsg={}", rawMsg)

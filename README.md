@@ -39,9 +39,10 @@ new KafkaSubscriber(
     maxBackoff = 3.minutes,
     system = actorSystem
   ).atLeastOnce(
-    Flow[KafkaMessage]
-      .map { msg: KafkaMessage =>
+    Flow[String]
+      .map { wrapper: KafkaMessage[String] =>
         // do something
+        println(wrapper.msg + "-world")
         
         // return the offset
         msg.offset
@@ -57,7 +58,7 @@ implicit val materializer: Materializer = ActorMaterializer()
 
 val publisher = new KafkaPublisher(actorSystem)
 
-publisher.publish("topic",msg)
+publisher.publish("topic", msg)
 
 ```
 
