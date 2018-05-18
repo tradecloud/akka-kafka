@@ -92,17 +92,19 @@ class KafkaSubscriber(
       .map(_.right.get)
   }
 
-  def atLeastOnce[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Future[Done] = {
-    val streamSubscribed = Promise[Done]
-
-    val consumerStream: Source[Done, Consumer.Control] = consumerSource
+  def consumerStream[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Source[Done, Consumer.Control] = {
+    consumerSource
       .via(serializer.deserializeFlow)
       .via(filterTypeFlow[T])
       .via(flow)
       .via(commitFlow)
+  }
+
+  def atLeastOnce[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Future[Done] = {
+    val streamSubscribed = Promise[Done]
 
     val consumerProps = KafkaSubscriberActor.props(
-      consumerStream = consumerStream,
+      consumerStream = consumerStream(flow),
       topics = prefixedTopics,
       batchingSize = batchingSize,
       batchingInterval = batchingInterval,
