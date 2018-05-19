@@ -147,7 +147,7 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
 
       var committedCount = 0
       val control = subscriber
-        .consumerStream(
+        .atLeastOnceStream(
           Flow[KafkaMessage[String]].map { msg =>
             receiverProbe.ref ! msg.msg
 
