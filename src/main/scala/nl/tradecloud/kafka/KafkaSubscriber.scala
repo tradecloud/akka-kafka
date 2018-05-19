@@ -9,13 +9,14 @@ import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.pattern.{BackoffSupervisor, after}
 import akka.stream.Materializer
-import akka.stream.scaladsl.{Flow, Source}
+import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.config.KafkaConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
+import scala.reflect.ClassTag
 
 class KafkaSubscriber(
     serviceName: String,
@@ -62,25 +63,48 @@ class KafkaSubscriber(
       .groupedWithin(batchingSize, batchingInterval)
       .map(group => group.foldLeft(CommittableOffsetBatch.empty) { (batch, elem) => batch.updated(elem) })
       .mapAsync(parallelism = 3) { msg =>
-        log.debug("Committing offset, msg={}", msg)
+        log.debug("committing offset, msg={}", msg)
 
         msg.commitScaladsl().map { result =>
-          log.debug("Committed offset, msg={}", msg)
+          log.debug("committed offset, msg={}", msg)
           result
         }
       }
   }
 
-  def atLeastOnce(flow: Flow[KafkaMessage, CommittableOffset, _]): Future[Done] = {
-    val streamSubscribed = Promise[Done]
+  val commitSink: Sink[CommittableOffset, _] = {
+    commitFlow.to(Sink.ignore)
+  }
 
-    val consumerStream: Source[Done, Consumer.Control] = consumerSource
+  private[this] def filterType[T](wrapper: KafkaMessage[Any])(implicit tag: ClassTag[T]): Either[KafkaMessage[Any], KafkaMessage[T]] = {
+    if (tag.runtimeClass.isInstance(wrapper.msg)) {
+      Right(wrapper.asInstanceOf[KafkaMessage[T]])
+    } else Left(wrapper)
+  }
+
+  def filterTypeFlow[T](implicit tag: ClassTag[T]): Flow[KafkaMessage[Any], KafkaMessage[T], NotUsed] = {
+    Flow[KafkaMessage[Any]]
+      .map(filterType[T])
+      .divertTo(
+        that = Flow[Either[KafkaMessage[Any], KafkaMessage[T]]].map(_.left.get.offset).to(commitSink),
+        when = _.isLeft
+      )
+      .map(_.right.get)
+  }
+
+  def atLeastOnceStream[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Source[Done, Consumer.Control] = {
+    consumerSource
       .via(serializer.deserializeFlow)
+      .via(filterTypeFlow[T])
       .via(flow)
       .via(commitFlow)
+  }
+
+  def atLeastOnce[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Future[Done] = {
+    val streamSubscribed = Promise[Done]
 
     val consumerProps = KafkaSubscriberActor.props(
-      consumerStream = consumerStream,
+      consumerStream = atLeastOnceStream(flow),
       topics = prefixedTopics,
       batchingSize = batchingSize,
       batchingInterval = batchingInterval,

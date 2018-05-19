@@ -1,16 +1,17 @@
 package nl.tradecloud.kafka
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Flow
+import akka.stream.scaladsl.{Flow, Keep, Sink}
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, WordSpecLike}
 
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContextExecutor}
 
 class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", ConfigFactory.load("application-test")))
   with WordSpecLike with BeforeAndAfterAll with BeforeAndAfterEach {
@@ -33,9 +34,9 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
     super.afterAll()
   }
 
-  "The KafkaSubscriber" must {
-    "be able to subscribe to a topic" in {
-      val receiverProbe = TestProbe("receiver")
+  "The KafkaSubscriber" should {
+    "consume from a topic" in {
+      val receiverProbe = TestProbe()
       val publisher = new KafkaPublisher(system)
 
       val subscriber1 = new KafkaSubscriber(
@@ -47,7 +48,7 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       )
 
       subscriber1.atLeastOnce(
-        Flow[KafkaMessage].map { msg =>
+        Flow[KafkaMessage[String]].map { msg =>
           receiverProbe.ref ! msg.msg
 
           msg.offset
@@ -76,7 +77,7 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       )
 
       subscriber2.atLeastOnce(
-        Flow[KafkaMessage].map { msg =>
+        Flow[KafkaMessage[String]].map { msg =>
           receiverProbe.ref ! msg.msg
 
           msg.offset
@@ -96,7 +97,7 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       )
 
       subscriber3.atLeastOnce(
-        Flow[KafkaMessage].map { msg =>
+        Flow[KafkaMessage[String]].map { msg =>
           receiverProbe.ref ! msg
 
           msg.offset
@@ -104,6 +105,68 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       )
 
       receiverProbe.expectNoMessage(defaultNegativeTimeout)
+    }
+
+    "drop messages with an invalid type" in {
+      val receiverProbe = TestProbe()
+      val publisher = new KafkaPublisher(system)
+
+      val subscriber = new KafkaSubscriber(
+        serviceName = "test",
+        group = "test_group_0",
+        topics = Set("test_topic_5"),
+        system = system,
+        configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
+      )
+
+      subscriber.atLeastOnce[String](
+        Flow[KafkaMessage[String]].map { msg =>
+          receiverProbe.ref ! msg.msg
+
+          msg.offset
+        }
+      )
+
+      publisher.publish(
+        topic = "test_topic_5",
+        msg = Done
+      )
+      receiverProbe.expectNoMessage(defaultNegativeTimeout)
+    }
+
+    "commit messages using the commitFlow" in {
+      val receiverProbe = TestProbe()
+      val publisher = new KafkaPublisher(system)
+      val subscriber = new KafkaSubscriber(
+        serviceName = "test",
+        group = "test_group_0",
+        topics = Set("test_topic_6"),
+        system = system,
+        configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
+      )
+
+      var committedCount = 0
+      val control = subscriber
+        .atLeastOnceStream(
+          Flow[KafkaMessage[String]].map { msg =>
+            receiverProbe.ref ! msg.msg
+
+            msg.offset
+          }
+        )
+        .map { _ =>
+          committedCount += 1
+        }
+        .toMat(Sink.ignore)(Keep.left)
+        .run()
+
+      publisher.publish("test_topic_6", "Hello")
+
+      receiverProbe.expectMsg(defaultTimeout, "Hello")
+
+      Await.ready(control.shutdown(), defaultTimeout)
+
+      assert(committedCount == 1)
     }
   }
 
