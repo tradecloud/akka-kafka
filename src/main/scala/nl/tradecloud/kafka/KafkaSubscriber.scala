@@ -56,6 +56,13 @@ class KafkaSubscriber(
     Consumer
       .committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
       .map(committableMessage => (committableMessage.committableOffset, committableMessage.record.value))
+      .watchTermination() { (mat, f: Future[Done]) =>
+        f.foreach { _ =>
+          log.debug("consumer source shutdown, consumerId={}, group={}, topics={}", consumerId, group, prefixedTopics.mkString(", "))
+        }
+
+        mat
+      }
   }
 
   val commitFlow: Flow[CommittableOffset, Done, NotUsed] = {
