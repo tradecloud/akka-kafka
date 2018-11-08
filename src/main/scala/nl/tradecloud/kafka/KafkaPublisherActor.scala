@@ -10,7 +10,7 @@ import nl.tradecloud.kafka.config.KafkaConfig
 
 import scala.concurrent.ExecutionContext
 
-class KafkaPublisherActor(
+private[kafka] final class KafkaPublisherActor(
     kafkaConfig: KafkaConfig,
     publishFlow: Flow[Publish, Done, NotUsed]
 )(implicit mat: Materializer, ec: ExecutionContext) extends Actor with ActorLogging {
@@ -36,7 +36,7 @@ class KafkaPublisherActor(
 
   private def run(): Unit = {
     val ((queue, killSwitch), streamDone) = Source.queue[Publish](1000, OverflowStrategy.backpressure)
-      .via(publishFlow)
+      .via(publishFlow).withAttributes(ActorAttributes.supervisionStrategy(Supervision.stoppingDecider))
       .viaMat(KillSwitches.single)(Keep.both)
       .toMat(Sink.ignore)(Keep.both)
       .run()

@@ -10,7 +10,7 @@ import akka.stream.scaladsl.{Keep, Sink, Source}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Promise}
 
-private[kafka] class KafkaSubscriberActor(
+private[kafka] final class KafkaSubscriberActor(
     consumerStream: Source[Done, Consumer.Control],
     topics: Set[String],
     batchingSize: Int,
@@ -39,7 +39,7 @@ private[kafka] class KafkaSubscriberActor(
 
   private def run(): Unit = {
     val (killSwitch, streamDone) =
-      consumerStream
+      consumerStream.withAttributes(ActorAttributes.supervisionStrategy(Supervision.stoppingDecider))
         .viaMat(KillSwitches.single)(Keep.right)
         .toMat(Sink.ignore)(Keep.both)
         .run()
