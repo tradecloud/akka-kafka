@@ -26,9 +26,8 @@ class KafkaSubscriber(
     maxBackoff: FiniteDuration = 30.seconds,
     batchingSize: Int = 1,
     batchingInterval: FiniteDuration = 3.seconds,
-    system: ActorSystem,
     configurationProperties: Seq[(String, String)] = Seq.empty
-)(implicit mat: Materializer, context: ActorRefFactory) {
+)(implicit system: ActorSystem, materializer: Materializer, context: ActorRefFactory) {
   import KafkaSubscriber._
 
   private[this] implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
@@ -66,17 +65,7 @@ class KafkaSubscriber(
   }
 
   val commitFlow: Flow[CommittableOffset, Done, NotUsed] = {
-    Flow[CommittableOffset]
-      .groupedWithin(batchingSize, batchingInterval)
-      .map(group => group.foldLeft(CommittableOffsetBatch.empty) { (batch, elem) => batch.updated(elem) })
-      .mapAsync(parallelism = 3) { msg =>
-        log.debug("committing offset, msg={}", msg)
-
-        msg.commitScaladsl().map { result =>
-          log.debug("committed offset, msg={}", msg)
-          result
-        }
-      }
+    KafkaSubscriber.commitFlow(batchingSize, batchingInterval)
   }
 
   val commitSink: Sink[CommittableOffset, _] = {
@@ -141,4 +130,15 @@ class KafkaSubscriber(
 
 object KafkaSubscriber {
   private val KafkaClientIdSequenceNumber = new AtomicInteger(1)
+
+  def commitFlow(batchingSize: Int, batchingInterval: FiniteDuration)(implicit ec: ExecutionContext): Flow[CommittableOffset, Done, NotUsed] = {
+    Flow[CommittableOffset]
+      .groupedWithin(batchingSize, batchingInterval)
+      .map(group => group.foldLeft(CommittableOffsetBatch.empty) { (batch, elem) => batch.updated(elem) })
+      .mapAsync(parallelism = 3) { msg =>
+        msg.commitScaladsl().map { result =>
+          result
+        }
+      }
+  }
 }

@@ -37,13 +37,12 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
   "The KafkaSubscriber" should {
     "consume from a topic" in {
       val receiverProbe = TestProbe()
-      val publisher = new KafkaPublisher(system)
+      val publisher = new KafkaPublisher()
 
       val subscriber1 = new KafkaSubscriber(
         serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
-        system = system,
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
       )
 
@@ -72,7 +71,6 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
         serviceName = "test",
         group = "test_group_1",
         topics = Set("test_topic_0"),
-        system = system,
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
       )
 
@@ -92,7 +90,6 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
         serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
-        system = system,
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
       )
 
@@ -109,13 +106,12 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
 
     "drop messages with an invalid type" in {
       val receiverProbe = TestProbe()
-      val publisher = new KafkaPublisher(system)
+      val publisher = new KafkaPublisher()
 
       val subscriber = new KafkaSubscriber(
         serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_5"),
-        system = system,
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
       )
 
@@ -136,12 +132,11 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
 
     "commit messages using the commitFlow" in {
       val receiverProbe = TestProbe()
-      val publisher = new KafkaPublisher(system)
+      val publisher = new KafkaPublisher()
       val subscriber = new KafkaSubscriber(
         serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_6"),
-        system = system,
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
       )
 

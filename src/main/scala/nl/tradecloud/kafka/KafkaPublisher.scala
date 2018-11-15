@@ -17,7 +17,7 @@ import org.apache.kafka.common.serialization.{ByteArraySerializer, StringSeriali
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
 
-class KafkaPublisher(system: ActorSystem)(implicit mat: Materializer, context: ActorRefFactory) {
+class KafkaPublisher()(implicit system: ActorSystem, mat: Materializer, context: ActorRefFactory) {
   import KafkaPublisher._
   private[this] val log: LoggingAdapter = Logging(system, this.getClass)
   private[this] implicit val dispatcher: ExecutionContext = system.dispatchers.lookup("dispatchers.kafka-dispatcher")
