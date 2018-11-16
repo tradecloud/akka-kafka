@@ -40,7 +40,6 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       val publisher = new KafkaPublisher()
 
       val subscriber1 = new KafkaSubscriber(
-        serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
@@ -68,7 +67,6 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
 
       // subscribe with different group
       val subscriber2 = new KafkaSubscriber(
-        serviceName = "test",
         group = "test_group_1",
         topics = Set("test_topic_0"),
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
@@ -87,7 +85,6 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
 
       // start subscriber with same profile as 1st subscriber
       val subscriber3 = new KafkaSubscriber(
-        serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_0"),
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
@@ -109,7 +106,6 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       val publisher = new KafkaPublisher()
 
       val subscriber = new KafkaSubscriber(
-        serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_5"),
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
@@ -134,7 +130,6 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       val receiverProbe = TestProbe()
       val publisher = new KafkaPublisher()
       val subscriber = new KafkaSubscriber(
-        serviceName = "test",
         group = "test_group_0",
         topics = Set("test_topic_6"),
         configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")

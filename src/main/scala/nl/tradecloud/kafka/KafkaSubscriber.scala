@@ -18,14 +18,14 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
 import scala.reflect.ClassTag
 
-class KafkaSubscriber(
-    serviceName: String,
+final class KafkaSubscriber(
     group: String,
     topics: Set[String],
-    minBackoff: FiniteDuration = 3.seconds,
-    maxBackoff: FiniteDuration = 30.seconds,
-    batchingSize: Int = 1,
-    batchingInterval: FiniteDuration = 3.seconds,
+    serviceName: Option[String] = None,
+    minBackoff: Option[FiniteDuration] = None,
+    maxBackoff: Option[FiniteDuration] = None,
+    batchingSize: Option[Int] = None,
+    batchingInterval: Option[FiniteDuration] = None,
     configurationProperties: Seq[(String, String)] = Seq.empty
 )(implicit system: ActorSystem, materializer: Materializer, context: ActorRefFactory) {
   import KafkaSubscriber._
@@ -44,7 +44,7 @@ class KafkaSubscriber(
       .withBootstrapServers(kafkaConfig.brokers)
       .withGroupId(kafkaConfig.groupPrefix + group)
       // Consumer must have a unique clientId otherwise a javax.management.InstanceAlreadyExistsException is thrown
-      .withClientId(s"$serviceName-$consumerId")
+      .withClientId(s"${serviceName.getOrElse(kafkaConfig.serviceName)}-$consumerId")
       .withProperties(configurationProperties:_*)
   }
   val consumerActorName: String =  "KafkaConsumerActor" + consumerId
@@ -65,7 +65,10 @@ class KafkaSubscriber(
   }
 
   val commitFlow: Flow[CommittableOffset, Done, NotUsed] = {
-    KafkaSubscriber.commitFlow(batchingSize, batchingInterval)
+    KafkaSubscriber.commitFlow(
+      batchingSize = batchingSize.getOrElse(kafkaConfig.consumerCommitBatchingSize),
+      batchingInterval = batchingInterval.getOrElse(kafkaConfig.consumerCommitBatchingInterval)
+    )
   }
 
   val commitSink: Sink[CommittableOffset, _] = {
@@ -102,16 +105,16 @@ class KafkaSubscriber(
     val consumerProps = KafkaSubscriberActor.props(
       consumerStream = atLeastOnceStream(flow),
       topics = prefixedTopics,
-      batchingSize = batchingSize,
-      batchingInterval = batchingInterval,
+      batchingSize = batchingSize.getOrElse(kafkaConfig.consumerCommitBatchingSize),
+      batchingInterval = batchingInterval.getOrElse(kafkaConfig.consumerCommitBatchingInterval),
       streamSubscribed = streamSubscribed
     )
 
     val backoffConsumerProps = BackoffSupervisor.propsWithSupervisorStrategy(
       consumerProps,
       childName = consumerActorName,
-      minBackoff = minBackoff,
-      maxBackoff = maxBackoff,
+      minBackoff = minBackoff.getOrElse(kafkaConfig.consumerMinBackoff),
+      maxBackoff = maxBackoff.getOrElse(kafkaConfig.consumerMaxBackoff),
       randomFactor = 0.2,
       strategy = SupervisorStrategy.stoppingStrategy
     )
