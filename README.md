@@ -1,5 +1,5 @@
 # Kafka Akka
-[![Build Status](https://travis-ci.org/tradecloud/kafka-akka-extension.svg?branch=master)](https://travis-ci.org/tradecloud/kafka-akka-extension) [![Maven Central](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12/badge.svg)](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12) [![License](http://img.shields.io/:license-mit-blue.svg)](http://doge.mit-license.org)
+[![Build Status](https://travis-ci.org/tradecloud/akka-kafka.svg?branch=master)](https://travis-ci.org/tradecloud/akka-kafka) [![Maven Central](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12/badge.svg)](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12) [![License](http://img.shields.io/:license-mit-blue.svg)](http://doge.mit-license.org)
 
 A wrapper around [Akka's reactive kafka](https://github.com/akka/reactive-kafka) providing resilience and re-use of Akka defined serialization for Kafka messages.
 
@@ -8,7 +8,7 @@ A wrapper around [Akka's reactive kafka](https://github.com/akka/reactive-kafka)
 Add the dependency in the build.sbt, like:
 ```
 libraryDependencies ++= Seq(
-    "nl.tradecloud" %% "kafka-akka-extension" % "0.55"
+    "nl.tradecloud" %% "akka-kafka" % "0.65"
 )
 ```
 
@@ -16,6 +16,7 @@ Configure in the application.conf file, like:
 ```
 
 tradecloud.kafka {
+  serviceName = "test"
   brokers = "localhost:9092"
   topicPrefix = ""
   groupPrefix = ""
@@ -28,16 +29,12 @@ As this library is a wrapper around [Akka's reactive kafka](https://github.com/a
 
 ### Subscribe
 ```
-
+implicit val system: ActorSystem = ActorSystem()
 implicit val materializer: Materializer = ActorMaterializer()
 
 new KafkaSubscriber(
-    serviceName = "my_example_service",
     group = "some_group_name",
-    topics = Set("some_topic"),
-    minBackoff = 15.seconds,
-    maxBackoff = 3.minutes,
-    system = actorSystem
+    topics = Set("some_topic")
   ).atLeastOnce(
     Flow[String]
       .map { wrapper: KafkaMessage[String] =>
@@ -54,9 +51,10 @@ new KafkaSubscriber(
 ### Publish
 ```
 // promise is completed when publish is added to Kafka
+implicit val system: ActorSystem = ActorSystem()
 implicit val materializer: Materializer = ActorMaterializer()
 
-val publisher = new KafkaPublisher(actorSystem)
+val publisher = new KafkaPublisher()
 
 publisher.publish("topic", msg)
 

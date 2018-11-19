@@ -3,7 +3,7 @@ sonatypeProfileName := "nl.tradecloud"
 
 // To sync with Maven central, you need to supply the following information:
 pomExtra in Global := {
-  <url>https://github.com/tradecloud/kafka-akka-extension</url>
+  <url>https://github.com/tradecloud/akka-kafka</url>
     <licenses>
       <license>
         <name>MIT License</name>
@@ -12,9 +12,9 @@ pomExtra in Global := {
       </license>
     </licenses>
     <scm>
-      <url>https://github.com/tradecloud/kafka-akka-extension</url>
-      <connection>scm:git:git:github.com:tradecloud/kafka-akka-extension.git</connection>
-      <developerConnection>scm:git:git@github.com:tradecloud/kafka-akka-extension.git</developerConnection>
+      <url>https://github.com/tradecloud/akka-kafka</url>
+      <connection>scm:git:git:github.com:tradecloud/akka-kafka.git</connection>
+      <developerConnection>scm:git:git@github.com:tradecloud/akka-kafka.git</developerConnection>
     </scm>
     <developers>
       <developer>
