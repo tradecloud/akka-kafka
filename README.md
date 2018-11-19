@@ -1,5 +1,5 @@
 # Kafka Akka
-[![Build Status](https://travis-ci.org/tradecloud/akka-kafka.svg?branch=master)](https://travis-ci.org/tradecloud/akka-kafka) [![Maven Central](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12/badge.svg)](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12) [![License](http://img.shields.io/:license-mit-blue.svg)](http://doge.mit-license.org)
+[![Build Status](https://travis-ci.org/tradecloud/akka-kafka.svg?branch=master)](https://travis-ci.org/tradecloud/akka-kafka) [![Maven Central](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/akka-kafka_2.12/badge.svg)](https://maven-badges.herokuapp.com/maven-central/nl.tradecloud/kafka-akka-extension_2.12) [![License](http://img.shields.io/:license-mit-blue.svg)](http://doge.mit-license.org)
 
 A wrapper around [Akka's reactive kafka](https://github.com/akka/reactive-kafka) providing resilience and re-use of Akka defined serialization for Kafka messages.
 
