@@ -11,7 +11,7 @@ object  Dependencies {
     "com.typesafe.akka"       %% "akka-remote"                % Version.akka,
     "org.scalatest"           %% "scalatest"                  % "3.0.5"           % "test",
     "com.typesafe.akka"       %% "akka-testkit"               % Version.akka      % "test",
-    "net.manub"               %% "scalatest-embedded-kafka"   % "1.1.0"           % "test"
+    "net.manub"               %% "scalatest-embedded-kafka"   % "1.1.1"           % "test"
   )
 
 }

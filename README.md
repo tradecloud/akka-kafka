@@ -62,5 +62,5 @@ publisher.publish("topic", msg)
 
 ### Serialization
 
-Serialization is handled using the Akka Remoting component, see: 
-[Akka Remoting Serialization](http://doc.akka.io/docs/akka/current/scala/remoting.html#Serialization)
+Serialization is handled using Akka Serialization, see: 
+[Akka Serialization](https://doc.akka.io/docs/akka/current/serialization.html)

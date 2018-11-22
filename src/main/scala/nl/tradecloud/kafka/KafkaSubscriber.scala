@@ -91,9 +91,11 @@ final class KafkaSubscriber(
       .map(_.right.get)
   }
 
+  val deserializeFlow: Flow[(CommittableOffset, Array[Byte]), KafkaMessage[Any], _] = serializer.deserializeFlow(commitSink)
+
   def atLeastOnceStream[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Source[Done, Consumer.Control] = {
     consumerSource
-      .via(serializer.deserializeFlow)
+      .via(deserializeFlow)
       .via(filterTypeFlow[T])
       .via(flow)
       .via(commitFlow)

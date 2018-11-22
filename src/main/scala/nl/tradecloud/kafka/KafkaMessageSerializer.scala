@@ -7,16 +7,17 @@ import akka.kafka.ConsumerMessage.CommittableOffset
 import akka.protobuf.ByteString
 import akka.remote.WireFormats.SerializedMessage
 import akka.serialization.{SerializationExtension, SerializerWithStringManifest}
-import akka.stream.scaladsl.Flow
+import akka.stream.scaladsl.{Flow, Sink}
 import nl.tradecloud.kafka.KafkaPublisher.KafkaProducerMessage
 import nl.tradecloud.kafka.command.Publish
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.errors.SerializationException
 
+import scala.util.Try
 import scala.util.control.NonFatal
 
 // COPIED FROM AKKA: https://github.com/akka/akka/blob/master/akka-remote/src/main/scala/akka/remote/MessageSerializer.scala
-class KafkaMessageSerializer(system: ActorSystem) {
+final class KafkaMessageSerializer(system: ActorSystem) {
   private[this] val log: LoggingAdapter = Logging(system, this.getClass)
   private[this] val serialization = SerializationExtension(system)
 
@@ -31,26 +32,27 @@ class KafkaMessageSerializer(system: ActorSystem) {
     ).get
   }
 
-  def deserializeFlow: Flow[(CommittableOffset, Array[Byte]), KafkaMessage[Any], NotUsed] = {
+  def deserializeFlow(commitSink: Sink[CommittableOffset, _]): Flow[(CommittableOffset, Array[Byte]), KafkaMessage[Any], NotUsed] = {
     Flow[(CommittableOffset, Array[Byte])]
-      .mapConcat { case (offset: CommittableOffset, rawMsg: Array[Byte]) =>
-        log.debug("de-serializing message, rawMsg={}", rawMsg)
+      .map { offsetAndRawMsg: (CommittableOffset, Array[Byte]) =>
+        Try {
+          val deserializedMsg = deserialize(SerializedMessage.parseFrom(offsetAndRawMsg._2))
 
-        try {
-          val deserializedMsg = deserialize(SerializedMessage.parseFrom(rawMsg))
-
-          List(KafkaMessage(deserializedMsg, offset))
-        } catch {
-          case e: Throwable =>
-            log.error(e, "message not deserializable, committing offset and resuming")
-            offset.commitScaladsl()
-            Nil
+          KafkaMessage(deserializedMsg, offsetAndRawMsg._1)
+        }.toEither.left.map { e: Throwable =>
+          log.error(e, "message not deserializable, committing offset and resuming")
+          offsetAndRawMsg._1
         }
       }
-      .map { wrappedMsg =>
-        log.debug("de-serialized message, msg={}", wrappedMsg.msg)
+      .divertTo(
+        that = Flow[Either[CommittableOffset, KafkaMessage[Any]]].map(_.left.get).to(commitSink),
+        when = _.isLeft
+      )
+      .map { wrappedMsg: Either[CommittableOffset, KafkaMessage[Any]] =>
+        val msg = wrappedMsg.right.get
+        log.debug("de-serialized message, msg={}", msg)
 
-        wrappedMsg
+        msg
       }
   }
 
