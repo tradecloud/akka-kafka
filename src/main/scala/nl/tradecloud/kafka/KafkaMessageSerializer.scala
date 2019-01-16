@@ -4,6 +4,7 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.kafka.ConsumerMessage.CommittableOffset
+import akka.kafka.ProducerMessage
 import akka.protobuf.ByteString
 import akka.remote.WireFormats.SerializedMessage
 import akka.serialization.{SerializationExtension, SerializerWithStringManifest}
@@ -88,7 +89,10 @@ final class KafkaMessageSerializer(system: ActorSystem) {
       log.debug("serializing message cmd={}", cmd)
       val msg = serialize(message = cmd.msg).toByteArray
 
-      new KafkaProducerMessage(new ProducerRecord[String, Array[Byte]](cmd.topic, msg), cmd)
+      ProducerMessage.Message(
+        new ProducerRecord[String, Array[Byte]](cmd.topic, msg),
+        cmd
+      )
     }
   }
 }

@@ -104,7 +104,7 @@ class KafkaPublisher()(implicit system: ActorSystem, mat: Materializer, context:
 }
 
 object KafkaPublisher {
-  private[kafka] type KafkaProducerMessage = ProducerMessage.Message[String, Array[Byte], Publish]
+  private[kafka] type KafkaProducerMessage = ProducerMessage.Envelope[String, Array[Byte], Publish]
   private[kafka] type KafkaProducerResult = ProducerMessage.Results[String, Array[Byte], Publish]
 
   private val KafkaClientIdSequenceNumber = new AtomicInteger(1)
