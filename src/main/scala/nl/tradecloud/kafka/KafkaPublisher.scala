@@ -7,8 +7,8 @@ import akka.event.{Logging, LoggingAdapter}
 import akka.kafka.scaladsl.Producer
 import akka.kafka.{ProducerMessage, ProducerSettings}
 import akka.pattern.{BackoffSupervisor, after}
-import akka.stream.scaladsl.{Broadcast, Flow, GraphDSL, Zip}
-import akka.stream.{FlowShape, Materializer, OverflowStrategy}
+import akka.stream.Materializer
+import akka.stream.scaladsl.Flow
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.command.Publish
 import nl.tradecloud.kafka.config.KafkaConfig
@@ -41,47 +41,19 @@ class KafkaPublisher()(implicit system: ActorSystem, mat: Materializer, context:
       )
     } else publisherSettings
 
-    Producer.flow[String, Array[Byte], NotUsed](settings)
+    Producer.flexiFlow(settings)
   }
 
-  // transform return back to publish command
-  private val resultTransformerFlow: Flow[(KafkaProducerResult, Publish), Publish, NotUsed] = Flow[(KafkaProducerResult, Publish)].map(_._2)
-
-  // buffer publish commands to be returned later on
-  private def publishCommandBufferFlow(withRetries: Boolean): Flow[Publish, Publish, NotUsed] = {
-    val flow = Flow[Publish].buffer(10, OverflowStrategy.backpressure)
-
-    if (withRetries) {
-      flow.backpressureTimeout(kafkaConfig.defaultPublishTimeout)
-    } else {
-      flow
-    }
+  private val topicPrefixFlow: Flow[Publish, Publish, NotUsed] = {
+    Flow[Publish].map(cmd => cmd.copy(topic = kafkaConfig.topicPrefix + cmd.topic))
   }
-
-  private val topicPrefixFlow: Flow[Publish, Publish, NotUsed] = Flow[Publish].map(cmd => cmd.copy(topic = kafkaConfig.topicPrefix + cmd.topic))
 
   // serialize messages, publish and get the publish command back when finished
   def serializeAndPublishFlow(withRetries: Boolean): Flow[Publish, Publish, NotUsed] = {
-    Flow.fromGraph(GraphDSL.create() { implicit builder =>
-      import GraphDSL.Implicits._
-
-      // prepare elems
-      val prefixFlowShape = builder.add(topicPrefixFlow)
-      val broadcast = builder.add(Broadcast[Publish](2))
-      val zip = builder.add(Zip[KafkaProducerResult, Publish])
-      val publishCmdBufferFlow =  builder.add(publishCommandBufferFlow(withRetries))
-      val resultTransformerShape = builder.add(resultTransformerFlow)
-      val serializerFlow = builder.add(serializer.serializerFlow)
-
-      // connect the graph
-      prefixFlowShape ~> broadcast.in
-      broadcast.out(0) ~> serializerFlow ~> publishFlow(withRetries) ~> zip.in0
-      broadcast.out(1) ~> publishCmdBufferFlow ~> zip.in1
-      zip.out ~> resultTransformerShape
-
-      // expose ports
-      FlowShape(prefixFlowShape.in, resultTransformerShape.out)
-    })
+    topicPrefixFlow
+      .via(serializer.serializerFlow)
+      .via(publishFlow(withRetries))
+      .map(_.passThrough)
   }
 
   // default callback when using the publish method
@@ -96,19 +68,7 @@ class KafkaPublisher()(implicit system: ActorSystem, mat: Materializer, context:
 
   // default publish and callback flow
   private def publishWithCallbackFlow(withRetries: Boolean, callback: Publish => _): Flow[Publish, Done, NotUsed] = {
-    Flow.fromGraph(GraphDSL.create() { implicit builder =>
-      import GraphDSL.Implicits._
-
-      // prepare elems
-      val serializeAndPublishShape = builder.add(serializeAndPublishFlow(withRetries))
-      val callbackShape = builder.add(callbackFlow(callback))
-
-      // connect the graph
-      serializeAndPublishShape.out ~> callbackShape
-
-      // expose ports
-      FlowShape(serializeAndPublishShape.in, callbackShape.out)
-    })
+    serializeAndPublishFlow(withRetries).via(callbackFlow(callback))
   }
 
   val publisherId: Int = KafkaClientIdSequenceNumber.getAndIncrement
@@ -144,8 +104,8 @@ class KafkaPublisher()(implicit system: ActorSystem, mat: Materializer, context:
 }
 
 object KafkaPublisher {
-  private[kafka] type KafkaProducerMessage = ProducerMessage.Message[String, Array[Byte], NotUsed]
-  private[kafka] type KafkaProducerResult = ProducerMessage.Result[String, Array[Byte], NotUsed]
+  private[kafka] type KafkaProducerMessage = ProducerMessage.Envelope[String, Array[Byte], Publish]
+  private[kafka] type KafkaProducerResult = ProducerMessage.Results[String, Array[Byte], Publish]
 
   private val KafkaClientIdSequenceNumber = new AtomicInteger(1)
 }
