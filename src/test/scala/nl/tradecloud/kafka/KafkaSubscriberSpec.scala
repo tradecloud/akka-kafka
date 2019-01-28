@@ -3,18 +3,19 @@ package nl.tradecloud.kafka
 import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Flow, Keep, Sink}
+import akka.stream.scaladsl.Flow
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, WordSpecLike}
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContextExecutor}
 
 class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", ConfigFactory.load("application-test")))
-  with WordSpecLike with BeforeAndAfterAll with BeforeAndAfterEach {
+  with WordSpecLike with BeforeAndAfterAll with BeforeAndAfterEach with ScalaFutures {
 
   private implicit val mat: ActorMaterializer = ActorMaterializer()(system)
   private implicit val ec: ExecutionContextExecutor = system.dispatcher
@@ -126,35 +127,43 @@ class KafkaSubscriberSpec extends TestKit(ActorSystem("KafkaSubscriberSpec", Con
       receiverProbe.expectNoMessage(defaultNegativeTimeout)
     }
 
-    "commit messages using the commitFlow" in {
+    "retry when exception is thrown" in {
       val receiverProbe = TestProbe()
       val publisher = new KafkaPublisher()
       val subscriber = new KafkaSubscriber(
-        group = "test_group_0",
+        group = "test_group_6",
         topics = Set("test_topic_6"),
-        configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest")
+        configurationProperties = Seq(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> "earliest"),
+        minBackoff = Some(10.millis),
+        maxBackoff = Some(20.seconds)
       )
 
       var committedCount = 0
-      val control = subscriber
-        .atLeastOnceStream(
-          Flow[KafkaMessage[String]].map { msg =>
+      var i = 0
+
+      val testFlow = {
+        Flow[KafkaMessage[String]].map { msg =>
+          i = i + 1
+
+          if (i <= 1) {
+            throw new RuntimeException("test")
+          } else {
             receiverProbe.ref ! msg.msg
 
             msg.offset
           }
-        )
-        .map { _ =>
-          committedCount += 1
         }
-        .toMat(Sink.ignore)(Keep.left)
-        .run()
+        .map { offset =>
+          committedCount += 1
+          offset
+        }
+      }
+
+      subscriber.atLeastOnce(testFlow)
 
       publisher.publish("test_topic_6", "Hello")
 
       receiverProbe.expectMsg(defaultTimeout, "Hello")
-
-      Await.ready(control.shutdown(), defaultTimeout)
 
       assert(committedCount == 1)
     }
