@@ -46,8 +46,6 @@ final class KafkaSubscriber(
       .withClientId(s"${serviceName.getOrElse(kafkaConfig.serviceName)}-$consumerId")
       .withProperties(configurationProperties:_*)
   }
-  val consumerActorName: String =  "KafkaConsumerActor" + consumerId
-  val consumerBackoffActorName: String =  "KafkaBackoffConsumer" + consumerId
   val prefixedTopics: Set[String] = topics.map(kafkaConfig.topicPrefix + _)
 
   val consumerSource: Source[(CommittableOffset, Array[Byte]), Future[Done]] = {
