@@ -1,6 +1,6 @@
 name := """akka-kafka"""
 
-version := "0.68.1"
+version := "0.69"
 
 scalaVersion := "2.12.8"
 

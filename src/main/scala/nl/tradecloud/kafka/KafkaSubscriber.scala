@@ -2,20 +2,19 @@ package nl.tradecloud.kafka
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.{ActorRefFactory, ActorSystem, SupervisorStrategy}
+import akka.actor.{ActorRefFactory, ActorSystem}
 import akka.event.Logging
 import akka.kafka.ConsumerMessage.{CommittableOffset, CommittableOffsetBatch}
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.pattern.{BackoffSupervisor, after}
 import akka.stream.Materializer
-import akka.stream.scaladsl.{Flow, Sink, Source}
+import akka.stream.scaladsl.{Flow, RestartSource, Sink, Source}
 import akka.{Done, NotUsed}
 import nl.tradecloud.kafka.config.KafkaConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 
 final class KafkaSubscriber(
@@ -47,20 +46,20 @@ final class KafkaSubscriber(
       .withClientId(s"${serviceName.getOrElse(kafkaConfig.serviceName)}-$consumerId")
       .withProperties(configurationProperties:_*)
   }
-  val consumerActorName: String =  "KafkaConsumerActor" + consumerId
-  val consumerBackoffActorName: String =  "KafkaBackoffConsumer" + consumerId
   val prefixedTopics: Set[String] = topics.map(kafkaConfig.topicPrefix + _)
 
-  val consumerSource: Source[(CommittableOffset, Array[Byte]), Consumer.Control] = {
+  val consumerSource: Source[(CommittableOffset, Array[Byte]), Future[Done]] = {
     Consumer
       .committableSource(consumerSettings, Subscriptions.topics(prefixedTopics))
       .map(committableMessage => (committableMessage.committableOffset, committableMessage.record.value))
-      .watchTermination() { (mat, f: Future[Done]) =>
-        f.foreach { _ =>
-          log.debug("consumer source shutdown, consumerId={}, group={}, topics={}", consumerId, group, prefixedTopics.mkString(", "))
-        }
+      .watchTermination() { (consumerControl, futureDone) =>
+        futureDone.flatMap { _ =>
+          log.info("terminated, consumerId={}, group={}, topics={}, shutting down consumer...", consumerId, group, prefixedTopics.mkString(", "))
 
-        mat
+          consumerControl.shutdown()
+        }.recoverWith {
+          case _ => consumerControl.shutdown()
+        }
       }
   }
 
@@ -93,7 +92,7 @@ final class KafkaSubscriber(
 
   val deserializeFlow: Flow[(CommittableOffset, Array[Byte]), KafkaMessage[Any], _] = serializer.deserializeFlow(commitSink)
 
-  def atLeastOnceStream[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Source[Done, Consumer.Control] = {
+  def atLeastOnceStream[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Source[Done, Future[Done]] = {
     consumerSource
       .via(deserializeFlow)
       .via(filterTypeFlow[T])
@@ -102,33 +101,13 @@ final class KafkaSubscriber(
   }
 
   def atLeastOnce[T](flow: Flow[KafkaMessage[T], CommittableOffset, _])(implicit tag: ClassTag[T]): Future[Done] = {
-    val streamSubscribed = Promise[Done]
-
-    val consumerProps = KafkaSubscriberActor.props(
-      consumerStream = atLeastOnceStream(flow),
-      topics = prefixedTopics,
-      batchingSize = batchingSize.getOrElse(kafkaConfig.consumerCommitBatchingSize),
-      batchingInterval = batchingInterval.getOrElse(kafkaConfig.consumerCommitBatchingInterval),
-      streamSubscribed = streamSubscribed
-    )
-
-    val backoffConsumerProps = BackoffSupervisor.propsWithSupervisorStrategy(
-      consumerProps,
-      childName = consumerActorName,
+    RestartSource.withBackoff(
       minBackoff = minBackoff.getOrElse(kafkaConfig.consumerMinBackoff),
       maxBackoff = maxBackoff.getOrElse(kafkaConfig.consumerMaxBackoff),
-      randomFactor = 0.2,
-      strategy = SupervisorStrategy.stoppingStrategy
-    )
-
-    context.actorOf(backoffConsumerProps, consumerBackoffActorName)
-
-    Future.firstCompletedOf(
-      Seq(
-        streamSubscribed.future,
-        after(kafkaConfig.defaultConsumeTimeout, system.scheduler)(Future.failed(new TimeoutException("Future timed out!")))
-      )
-    )
+      randomFactor = 0.2
+    ) { () =>
+      Source.fromFuture(atLeastOnceStream(flow).runWith(Sink.ignore))
+    }.runWith(Sink.ignore)
   }
 
 }
